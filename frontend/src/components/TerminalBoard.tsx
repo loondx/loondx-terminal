@@ -19,9 +19,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   const [showEMA, setShowEMA] = useState(false);
   
   const [rightWidth, setRightWidth] = useState(330);
-  const [bottomHeight, setBottomHeight] = useState(240);
+  const [bottomHeight, setBottomHeight] = useState(250);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(window.innerWidth > 1400);
 
   const [livePrice, setLivePrice] = useState<number>(stockData?.price || 212.49);
 
@@ -41,6 +42,14 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   }, [stockData]);
 
   useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 1024) setShowSidebar(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
       if (isResizingRight) {
         const nw = window.innerWidth - e.clientX;
@@ -48,7 +57,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
       }
       if (isResizingBottom) {
         const h = window.innerHeight - e.clientY - 48;
-        if (h > 150 && h < 600) setBottomHeight(h);
+        if (h > 180 && h < 600) setBottomHeight(h);
       }
     };
     const onMouseUp = () => {
@@ -169,19 +178,27 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
     net: +(b * 0.506).toFixed(1),
     eps: +(b * 0.036).toFixed(2),
     pe: +(sd.price / (b * 0.036 || 1)).toFixed(1),
-    ps: +(sd.price / (b * 0.211 || 1)).toFixed(2),
     roe: 16.4,
-    fcf: +(b * 0.44).toFixed(1),
+    fcf: +(b * 0.22).toFixed(1),
     dcf: +(b * 1.05).toFixed(2),
     graham: +(b * 0.98).toFixed(2),
     risk: Math.min(100, Math.round(35 + (sd.vol || 50) * 0.3 + Math.abs(sd.pct || 0) * 2.1)),
-    sent: Math.min(100, Math.round(50 + (sd.pct || 0) * 8 + (sd.dir==='up'?15:-15)))
   };
 
   const riskNeedle = -90 + (metrics.risk / 100) * 180;
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row bg-brand-bd overflow-hidden min-h-0 relative">
+      
+      {/* SIDEBAR TOGGLE BUTTON (Floating on right edge of chart area) */}
+      <button 
+        className="absolute right-[10px] top-[100px] z-[50] w-[24px] h-[24px] bg-brand-bgc border border-brand-bd rounded-full flex items-center justify-center text-brand-t1 hover:text-brand-bl transition-all hover:scale-110 shadow-lg"
+        onClick={() => setShowSidebar(!showSidebar)}
+        title={showSidebar ? "Hide Sidebar" : "Show Sidebar"}
+      >
+        {showSidebar ? '→' : '←'}
+      </button>
+
       <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
         <div className="flex flex-col flex-1 overflow-y-auto bg-brand-bg min-h-0 scrollbar-none">
           
@@ -216,121 +233,131 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
           <div className="h-[3px] bg-brand-bd cursor-row-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingBottom(true)}></div>
 
-          {/* BOTTOM PANELS - 1x3 Grid (Following Image Reference) */}
+          {/* BOTTOM PANELS - Grid per Image Ref */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-brand-bd shrink-0 overflow-hidden" style={{ height: window.innerWidth > 1024 ? bottomHeight : 'auto' }}>
             
             {/* Fundamentals */}
             <div className="bg-brand-bgp flex flex-col min-h-0">
               <PanelHeader label="FUNDAMENTALS" dot="bl" right={<span className="text-[9px] text-brand-t4 font-mono uppercase tracking-widest">TTM ● Q1 2025</span>} />
-              <div className="flex-1 p-[10px_14px] flex flex-col gap-[12px] overflow-y-auto scrollbar-none">
+              <div className="flex-1 p-[10px_14px] flex flex-col gap-[14px] overflow-y-auto scrollbar-none">
                 <div className="flex justify-between items-end">
-                  <div><div className="text-[9px] text-brand-t3 uppercase mb-[2px]">Revenue</div><div className="font-mono text-[18px] font-bold text-brand-bl">${metrics.rev}B</div><div className="text-[9px] text-brand-gr font-mono">TTM ▲ 4.1%</div></div>
+                  <div><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">Revenue</div><div className="font-mono text-[18px] font-bold text-brand-bl">${metrics.rev}B</div><div className="text-[9px] text-brand-gr font-mono">TTM ▲ 4.1%</div></div>
                   <div className="text-right">
-                    <div className="text-[9px] text-brand-t3 uppercase mb-[2px]">Net Income</div><div className="font-mono text-[18px] font-bold text-brand-tl">${metrics.net}B</div><div className="text-[9px] text-brand-gr font-mono">23.96% Margin ▲ 5.8%</div>
+                    <div className="text-[8px] text-brand-t3 uppercase mb-[3px]">Net Income</div><div className="font-mono text-[18px] font-bold text-brand-tl">${metrics.net}B</div><div className="text-[9px] text-brand-gr font-mono">23.96% Margin ▲ 5.8%</div>
                   </div>
                 </div>
-                <div className="flex justify-between items-end">
-                   <div><div className="text-[9px] text-brand-t3 uppercase mb-[2px]">ROE</div><div className="font-mono text-[16px] font-bold text-brand-gr">{metrics.roe}%</div></div>
-                   <div className="text-right"><div className="text-[9px] text-brand-t3 uppercase mb-[2px]">Free Cash Flow</div><div className="font-mono text-[16px] font-bold text-brand-tl">${metrics.fcf}B</div></div>
+                <div className="flex justify-between items-end border-t border-[rgba(255,255,255,.03)] pt-[10px]">
+                   <div><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">P/E Ratio</div><div className="font-mono text-[16px] font-bold text-brand-or">{metrics.pe}×</div><div className="text-[8px] text-brand-t4">Sector: 27.8× <span className="text-brand-re">+3.6×</span></div></div>
+                   <div className="text-right"><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">EPS Diluted</div><div className="font-mono text-[16px] font-bold text-brand-bl">${metrics.eps}</div><div className="text-[8px] text-brand-gr font-mono">TTM ▲ 11.2%</div></div>
                 </div>
               </div>
             </div>
 
             {/* Intrinsic Value */}
             <div className="bg-brand-bgp flex flex-col min-h-0 border-l border-brand-bd">
-              <PanelHeader label="INTRINSIC VALUE" dot="ye" right={<div className="flex gap-[10px] font-mono text-[9px] font-bold"><span className="text-brand-tl">DCF</span> <span className="text-brand-ye">GRAHAM</span></div>} />
-              <div className="flex-1 p-[10px_14px] flex flex-col gap-[15px] overflow-y-auto scrollbar-none">
-                <div className="flex justify-between items-baseline">
-                   <div><div className="text-[9px] text-brand-t3 uppercase mb-[2px]">DCF Value</div><div className="font-mono text-[18px] font-bold text-brand-tl">${metrics.dcf}</div></div>
-                   <div className="text-center"><div className="text-[9px] text-brand-t3 uppercase mb-[2px]">Graham #</div><div className="font-mono text-[18px] font-bold text-brand-ye">${metrics.graham}</div></div>
-                   <div className="text-right"><div className="text-[9px] text-brand-t3 uppercase mb-[2px]">Market Price</div><div className="font-mono text-[18px] font-bold text-brand-t1">${livePrice.toFixed(2)}</div></div>
+              <PanelHeader label="INTRINSIC VALUE" dot="ye" right={<div className="flex gap-[10px] font-mono text-[9px] font-bold"><span className="text-brand-tl">DCF</span> ● <span className="text-brand-ye">GRAHAM</span></div>} />
+              <div className="flex-1 p-[10px_14px] flex flex-col gap-[12px] overflow-y-auto scrollbar-none">
+                <div className="flex justify-between items-baseline font-mono">
+                   <div><div className="text-[8px] text-brand-t4 uppercase">DCF Val</div><div className="text-[15px] font-bold text-brand-tl">${metrics.dcf}</div></div>
+                   <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Market Price</div><div className="text-[15px] font-bold text-brand-t1">${livePrice.toFixed(2)}</div></div>
                 </div>
                 <div>
-                   <div className="flex justify-between text-[10px] mb-[4px]"><span className="text-brand-t3 uppercase font-bold text-[9px]">Margin of Safety</span><span className="text-brand-re font-bold">-12.2% OVERVALUED</span></div>
-                   <div className="h-[6px] bg-brand-bd rounded-full overflow-hidden flex"><div className="h-full bg-brand-or w-[45%]"></div></div>
+                  <div className="flex justify-between text-[10px] mb-[4px]"><span className="text-brand-t3 uppercase font-bold text-[8.5px]">Margin of Safety</span><span className="text-brand-re font-bold text-[9px]">-12.2% OVERVALUED</span></div>
+                  <div className="h-[5px] bg-brand-bd rounded-full overflow-hidden flex"><div className="h-full bg-brand-or w-[45%]"></div></div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-[15px] gap-y-[4px] border-t border-[rgba(255,255,255,.03)] pt-[8px]">
+                  {[{l:'WACC',v:'8.4%'},{l:'Term. g',v:'3.0%'},{l:'Growth',v:'7.2%'},{l:'Yield',v:'3.8%'}].map(i=>(
+                    <div key={i.l} className="flex justify-between"><span className="text-[8px] text-brand-t4 uppercase">{i.l}</span><span className="font-mono text-[9px] font-bold text-brand-t1">{i.v}</span></div>
+                  ))}
                 </div>
               </div>
             </div>
 
             {/* Elliott Wave */}
             <div className="bg-brand-bgp flex flex-col min-h-0 border-l border-brand-bd">
-              <PanelHeader label="ELLIOTT WAVE" dot="pu" right={<span className="text-[9px] text-brand-tl font-mono uppercase tracking-widest">Impulse — Wave 3</span>} />
-              <div className="flex-1 p-[4px_10px] min-h-0 overflow-hidden"><canvas ref={wChartRef}></canvas></div>
+              <PanelHeader label="ELLIOTT WAVE" dot="pu" right={<span className="text-[9px] text-brand-tl font-mono uppercase tracking-widest">IMPULSE — WAVE 3</span>} />
+              <div className="flex-1 flex flex-col p-[4px_10px] min-h-0 overflow-hidden">
+                <div className="flex-1 relative"><canvas ref={wChartRef}></canvas></div>
+              </div>
             </div>
 
           </div>
         </div>
       </div>
 
-      <div className="hidden lg:block w-[3px] bg-brand-bd cursor-col-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingRight(true)}></div>
+      {showSidebar && <div className="hidden lg:block w-[3px] bg-brand-bd cursor-col-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingRight(true)}></div>}
 
-      {/* RIGHT SIDEBAR - NEWS + NEW SECTIONS FROM IMAGE */}
-      <div className="flex flex-col bg-brand-bgp shrink-0 overflow-y-auto scrollbar-custom min-h-0" style={{ width: window.innerWidth > 1024 ? rightWidth : '100%' }}>
-        
-        {/* News Intelligence */}
-        <div className="shrink-0">
-           <PanelHeader label="NEWS INTELLIGENCE" dot="re" right={<span className="font-mono text-[9px] text-brand-re animate-pulse">● LIVE</span>} />
-           <div className="p-[2px_4px]">
-             {news.slice(0, 4).map((n, i) => (
-               <div key={i} className="p-[10px_12px] border-b border-brand-bd last:border-none hover:bg-brand-bgc transition-colors cursor-pointer group">
-                  <div className="flex justify-between items-center mb-[3px]">
-                    <span className="font-mono text-[9px] text-brand-bl font-bold uppercase">{n.src} <span className="text-brand-t4 font-normal ml-1">1m ago</span></span>
-                    <span className={`text-[8px] font-bold py-[1px] px-[4px] rounded-[2px] ${i < 2 ? 'text-brand-gr bg-[rgba(34,197,94,.1)]' : 'text-brand-re bg-[rgba(239,68,68,.1)]'}`}>{i < 2 ? '▲ BULL' : '▼ BEAR'}</span>
-                  </div>
-                  <div className="text-[11.5px] leading-[1.4] text-brand-t1 group-hover:text-brand-bl transition-colors tracking-tight">{n.h}</div>
-               </div>
-             ))}
-           </div>
-        </div>
-
-        {/* Sentiment (Per Image) */}
-        <div className="border-t border-brand-bd shrink-0">
-           <PanelHeader label="SENTIMENT" dot="bl" right={<div className="h-[4px] w-[50px] bg-brand-bd rounded-full overflow-hidden"><div className="h-full bg-brand-gr w-[75%]"></div></div>} />
-           <div className="p-[10px_14px] flex items-center justify-between">
-              <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">P/L Today</div><div className="font-mono text-[13px] font-bold text-brand-gr">+$1,042</div></div>
-              <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">P/L Total</div><div className="font-mono text-[13px] font-bold text-brand-gr">+$24.7K</div></div>
-              <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">Exposure</div><div className="font-mono text-[13px] font-bold text-brand-t1">$48,200</div></div>
-           </div>
-        </div>
-
-        {/* Risk Score (Per Image) */}
-        <div className="border-t border-brand-bd shrink-0">
-           <PanelHeader label="RISK SCORE" dot="ye" right={<span className="text-[8px] text-brand-ye uppercase tracking-widest font-bold">Composite Model</span>} />
-           <div className="p-[10px_16px] flex items-center gap-[20px]">
-              <div className="relative w-[80px] h-[55px]">
-                <svg width="80" height="55" viewBox="0 0 100 60">
-                   <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" strokeWidth="10" strokeLinecap="round" />
-                   <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="url(#rg2)" strokeWidth="10" strokeLinecap="round" strokeDasharray="125.6" strokeDashoffset={125.6 * (1 - metrics.risk/100)} />
-                   <defs><linearGradient id="rg2"><stop offset="0%" stopColor="#22c55e"/><stop offset="50%" stopColor="#eab308"/><stop offset="100%" stopColor="#ef4444"/></linearGradient></defs>
-                   <g style={{ transformOrigin: '50px 50px', transform: `rotate(${riskNeedle}deg)` }}><line x1="50" y1="50" x2="50" y2="15" stroke="white" strokeWidth="3" strokeLinecap="round" /></g>
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center pt-8"><div className="text-center leading-[1]"><div className="font-mono text-[14px] font-bold text-brand-ye">{metrics.risk}<span className="text-[10px] font-normal text-brand-t4">/100</span></div><div className="text-[7px] text-brand-t4 uppercase font-bold">Moderate Risk</div></div></div>
-              </div>
-              <div className="flex-1 flex flex-col gap-[4px]">
-                {[ {l:'Beta (β)', v:'1.18', c:'ye'}, {l:'Liquidity', v:'HIGH', c:'gr'}, {l:'Debt/Equity', v:'1.42', c:'tl'}, {l:'VaR 95%', v:'-3.1%', c:'re'} ].map((r,i)=>(
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="text-[8px] text-brand-t4 uppercase tracking-tighter">{r.l}</span>
-                    <div className="flex items-center gap-[6px]">
-                       <div className="h-[2px] w-[24px] bg-brand-bd rounded-full overflow-hidden"><div className={`h-full bg-brand-${r.c} w-[70%]`}></div></div>
-                       <span className={`font-mono text-[9px] font-bold text-brand-${r.c}`}>{r.v}</span>
+      {/* RIGHT SIDEBAR - FIXED SCROLLING & RESPONSIVE */}
+      {showSidebar && (
+        <div className="flex flex-col bg-brand-bgp shrink-0 overflow-hidden min-h-0 border-l border-brand-bd lg:border-none shadow-2xl z-40" style={{ width: window.innerWidth > 1024 ? rightWidth : '100%' }}>
+          
+          {/* Scrollable Container for ALL Sidebar Contents */}
+          <div className="flex-1 overflow-y-auto scrollbar-custom">
+            
+            {/* News Intelligence - Unified Header/Content */}
+            <div className="sticky top-0 z-10">
+               <PanelHeader label="NEWS INTELLIGENCE" dot="re" right={<span className="font-mono text-[9px] text-brand-re animate-pulse">● LIVE</span>} />
+            </div>
+            <div className="p-[2px_4px] bg-brand-bgp">
+               {news.map((n, i) => (
+                 <div key={i} className="p-[10px_12px] border-b border-brand-bd last:border-none hover:bg-brand-bgc transition-colors cursor-pointer group">
+                    <div className="flex justify-between items-center mb-[3px]">
+                      <span className="font-mono text-[9px] text-brand-bl font-bold uppercase">{n.src} <span className="text-brand-t4 font-normal ml-1">{n.time} ago</span></span>
+                      <span className={`text-[8px] font-bold py-[1px] px-[4px] rounded-[2px] ${i % 2 === 0 ? 'text-brand-gr bg-[rgba(34,197,94,.1)]' : 'text-brand-re bg-[rgba(239,68,68,.1)]'}`}>{i % 2 === 0 ? '▲ BULL' : '▼ BEAR'}</span>
                     </div>
+                    <div className="text-[11.5px] leading-[1.4] text-brand-t1 group-hover:text-brand-bl transition-colors tracking-tight font-medium">{n.h}</div>
+                 </div>
+               ))}
+            </div>
+
+            {/* Sentiment */}
+            <div className="sticky top-0 z-10 border-t border-brand-bd">
+               <PanelHeader label="SENTIMENT" dot="bl" right={<div className="h-[4px] w-[50px] bg-brand-bd rounded-full overflow-hidden"><div className="h-full bg-brand-gr w-[75%]"></div></div>} />
+            </div>
+            <div className="p-[15px_14px] flex items-center justify-between bg-brand-bgp">
+                <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">P/L Today</div><div className="font-mono text-[14px] font-bold text-brand-gr">+$1,042</div></div>
+                <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">Snapshot</div><div className="font-mono text-[14px] font-bold text-brand-tl">BULLISH</div></div>
+                <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">Exposure</div><div className="font-mono text-[14px] font-bold text-brand-t1">$48,200</div></div>
+            </div>
+
+            {/* Risk Score */}
+            <div className="sticky top-0 z-10 border-t border-brand-bd">
+               <PanelHeader label="RISK SCORE" dot="ye" right={<span className="text-[8px] text-brand-ye uppercase tracking-widest font-bold">Composite Model</span>} />
+            </div>
+            <div className="p-[15px_16px] flex flex-col gap-[15px] bg-brand-bgp pb-4 px-4">
+                <div className="flex items-center gap-[20px]">
+                  <div className="relative w-[80px] h-[55px]">
+                    <svg width="80" height="55" viewBox="0 0 100 60">
+                       <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" strokeWidth="10" strokeLinecap="round" />
+                       <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="url(#rg4)" strokeWidth="10" strokeLinecap="round" strokeDasharray="125.6" strokeDashoffset={125.6 * (1 - metrics.risk/100)} />
+                       <defs><linearGradient id="rg4"><stop offset="0%" stopColor="#22c55e"/><stop offset="50%" stopColor="#eab308"/><stop offset="100%" stopColor="#ef4444"/></linearGradient></defs>
+                       <g style={{ transformOrigin: '50px 50px', transform: `rotate(${riskNeedle}deg)` }}><line x1="50" y1="50" x2="50" y2="15" stroke="white" strokeWidth="3" strokeLinecap="round" /></g>
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center pt-8"><div className="text-center leading-[1]"><div className="font-mono text-[14px] font-bold text-brand-ye">{metrics.risk}<span className="text-[10px] font-normal text-brand-t4">/100</span></div></div></div>
                   </div>
-                ))}
-              </div>
-           </div>
-        </div>
+                  <div className="flex-1 flex flex-col gap-[4px]">
+                    {[ {l:'Beta (β)', v:'1.18', c:'ye'}, {l:'Liquidity', v:'HIGH', c:'gr'} ].map((r,i)=>(
+                      <div key={i} className="flex items-center justify-between">
+                        <span className="text-[8px] text-brand-t4 uppercase tracking-tighter">{r.l}</span>
+                        <span className={`font-mono text-[9px] font-bold text-brand-${r.c}`}>{r.v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+            </div>
 
-        {/* Key Ratios (Per Image) */}
-        <div className="border-t border-brand-bd shrink-0 pb-4">
-           <PanelHeader label="KEY RATIOS" dot="tl" right={<span className="text-[8px] text-brand-t4 font-mono uppercase">vs Sector</span>} />
-           <div className="p-[10px_16px] grid grid-cols-3 gap-[10px]">
-              <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">Div Yield</div><div className="font-mono text-[13px] font-bold text-brand-gr">0.48%</div><div className="text-[7px] text-brand-t4 font-mono">Sect: 1.2%</div></div>
-              <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">ROA</div><div className="font-mono text-[13px] font-bold text-brand-t1">22.4%</div><div className="text-[7px] text-brand-t4 font-mono">Sect: 14.1%</div></div>
-              <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">Payout</div><div className="font-mono text-[13px] font-bold text-brand-or">15.4%</div><div className="text-[7px] text-brand-t4 font-mono">Sect: 38%</div></div>
-           </div>
-        </div>
+            {/* Key Ratios */}
+            <div className="sticky top-0 z-10 border-t border-brand-bd">
+               <PanelHeader label="KEY RATIOS" dot="tl" right={<span className="text-[8px] text-brand-t4 font-mono uppercase">Sector Rank: #1</span>} />
+            </div>
+            <div className="p-[15px_16px] grid grid-cols-2 gap-[15px] bg-brand-bgp pb-8">
+                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">Div Yield</div><div className="font-mono text-[13px] font-bold text-brand-gr">0.48%</div></div>
+                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">Payout</div><div className="font-mono text-[13px] font-bold text-brand-or">15.4%</div></div>
+            </div>
 
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
