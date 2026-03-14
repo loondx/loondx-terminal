@@ -47,7 +47,7 @@ export class JobsService {
           update: {
             price: details.price,
             changePercent: details.change_percent,
-            volume: details.volume,
+            volume: details.volume, // Volume now in schema
             lastUpdated: new Date(),
           },
           create: {
@@ -71,13 +71,21 @@ export class JobsService {
       try {
         const financials = await this.scraperService.scrapeScreener(ticker);
         if (financials) {
+          // Derive EPS from PE if possible
+          const currentStock = await this.prisma.stock.findUnique({ where: { ticker } });
+          const eps = financials.stockPE > 0 && currentStock?.price 
+            ? parseFloat((currentStock.price / financials.stockPE).toFixed(2)) 
+            : 0;
+
           await this.prisma.stock.update({
             where: { ticker },
             data: {
               roe: financials.roe,
               debtToEquity: financials.debtToEquity,
-              eps: financials.eps,
+              eps,
               marketCap: financials.marketCap,
+              stockPE: financials.stockPE,
+              bookValue: financials.bookValue,
             },
           });
           this.logger.log(`Updated financials for ${ticker} via Screener.in`);
@@ -96,20 +104,28 @@ export class JobsService {
 
     for (const stock of stocks) {
       try {
-        // Fetch news via RSS for deeper context than standard API
         const rssNews = await this.scraperService.scrapeNews(stock.ticker);
-        const social = await this.macroService.getSocialSentiment(stock.ticker);
+        const history = await this.scraperService.fetchHistoricalData(stock.ticker);
         
-        const deepAnalysis = await this.aiService.deepStockAnalysis(stock, rssNews, macroData, social);
+        // Aligned with New AIService signature: (stockData, historical, news, macro)
+        const deepAnalysis = await this.aiService.deepStockAnalysis(
+          stock, 
+          history, 
+          rssNews, 
+          macroData
+        );
         
         await this.prisma.aIInsight.create({
           data: {
             stockId: stock.id,
             summary: deepAnalysis.summary,
-            sentimentScore: deepAnalysis.sentimentScore,
-            intrinsicValue: deepAnalysis.intrinsicValue,
             recommendation: deepAnalysis.recommendation,
-            impactChain: deepAnalysis.impactAnalysis,
+            intrinsicValue: deepAnalysis.intrinsicValue,
+            valuationScore: deepAnalysis.valuationScore,
+            riskScore: deepAnalysis.riskScore,
+            growthScore: deepAnalysis.growthScore,
+            sentimentScore: deepAnalysis.sentimentScore,
+            impactChain: deepAnalysis.impactChain,
             analysisType: 'DEEP_RESEARCH',
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
           },

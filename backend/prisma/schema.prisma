@@ -1,5 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// LOONDX Terminal — Prisma Schema
+// Design principle: Only persist what is SLOW/EXPENSIVE to re-fetch.
+// News, social, filings → Redis (ephemeral, 10-30 min TTL)
+// Company fundamentals + AI analysis → PostgreSQL (persist)
 
 generator client {
   provider = "prisma-client-js"
@@ -9,139 +11,134 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Core Company Record ──────────────────────────────────────────────────────
 model Stock {
-  id              String       @id @default(cuid())
-  ticker          String       @unique // e.g., RELIANCE.NS, TCS.NS
-  name            String
-  sectorId        String?
-  sector          Sector?      @relation(fields: [sectorId], references: [id])
-  lastUpdated     DateTime     @default(now())
+  id          String    @id @default(cuid())
+  ticker      String    @unique   // e.g. RELIANCE, TCS, INFY
+  name        String              
+  exchange    String    @default("NSE")
+  lastUpdated DateTime  @updatedAt
 
-  // Market Data (Must Have 1)
-  price           Float?
-  change          Float?
-  changePercent   Float?
-  volume          Float?
-  marketCap       Float?
-  
-  // Financials (Must Have 2)
-  revenue         Float?
-  netIncome       Float?
-  eps             Float?
-  peRatio         Float?
-  pbRatio         Float?
-  roe             Float?
-  fcf             Float?
-  debtToEquity    Float?
-  
-  // Social Sentiment (Social 2)
-  tweets          Tweet[]
-  redditPosts     RedditPost[]
-  sentimentScore  Float?       // Aggregated AI score
+  price         Float?
+  change        Float?
+  changePercent Float?
+  volume        Float?     // Added missing volume
 
-  // Institutional Activity (Must Have 4)
-  fiiHolding      Float?
-  diiHolding      Float?
-  promoterHolding Float?
+  marketCap    Float?
+  roe          Float?
+  debtToEquity Float?
+  eps          Float?
+  stockPE      Float?
+  bookValue    Float?
+
+  financials   Json?      // Quarterly tables (Headers/Rows)
   
-  news            News[]
-  aiInsights      AIInsight[]
+  sectorId     String?
+  sector       Sector?     @relation(fields: [sectorId], references: [id])
   
-  // Detailed Financials (JSON)
-  financials      Json?        // Quarterly Results, P&L
-  newsData        Json?        // Structured news with links
-  
-  // Dependencies (Supply Chain 7)
-  upstream        StockDependency[] @relation("UpstreamRelation")
-  downstream      StockDependency[] @relation("DownstreamRelation")
+  aiInsights   AIInsight[]
+  priceHistory PriceHistory[]
+  earnings     EarningsRecord[]
 }
 
+// ─── Historical Data (for trend & volatility analysis) ─────────────────────
+model PriceHistory {
+  id        String   @id @default(cuid())
+  stockId   String
+  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  date      DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  @@unique([stockId, date])
+}
+
+// ─── Earnings Records (to detect surprises) ───────────────────────────────
+model EarningsRecord {
+  id         String   @id @default(cuid())
+  stockId    String
+  stock      Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  quarter    String   // Q3-2024
+  actualEPS  Float
+  estEPS     Float?
+  surprise   Float?   // % surprise
+  revenue    Float?
+  netProfit  Float?
+  reportDate DateTime
+}
+
+// ─── Sector & Relationships ──────────────────────────────────────────────────
 model Sector {
-  id            String   @id @default(cuid())
-  name          String   @unique // IT, Banking, Energy, etc.
-  sentiment     String?  // BULLISH, BEARISH
-  macroContext  String?  @db.Text
-  stocks        Stock[]
+  id           String  @id @default(cuid())
+  name         String  @unique  // IT, Banking, Energy, etc.
+  performance  Float?   // 24h sector movement
+  volatility   Float?
+  sentiment    String?  // BULLISH | BEARISH
+  macroContext String? @db.Text
+  stocks       Stock[]
+  dependencies DependencyMap[] @relation("AffectedSector")
 }
 
-model News {
+// ─── Event Impact System (e.g. Oil -> Airlines) ─────────────────────────────
+model DependencyMap {
+  id               String   @id @default(cuid())
+  sourceType       String   // MACRO | SECTOR
+  sourceName       String   // e.g. "Crude Oil"
+  affectedSectorId String?
+  affectedSector   Sector?  @relation("AffectedSector", fields: [affectedSectorId], references: [id])
+  impactDirection  String   // NEGATIVE | POSITIVE
+  description      String   // "High oil prices increase fuel parity costs for airlines"
+}
+
+// ─── AI Intelligence (Insight over Data) ──────────────────────────────────────
+model AIInsight {
+  id              String   @id @default(cuid())
+  stockId         String
+  stock           Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  
+  summary         String   @db.Text
+  recommendation  String?  // BUY | HOLD | SELL
+  analysisType    String?  @default("DEEP_RESEARCH")
+  
+  // Structured Insight Scores (0-100)
+  sentimentScore  Float?   
+  riskScore       Float?
+  valuationScore  Float?
+  growthScore     Float?
+  
+  intrinsicValue  Float?
+  impactChain     String?  @db.Text
+  precomputedAt   DateTime @default(now())
+  expiresAt       DateTime? // For job compatibility
+}
+
+// ─── Market Narrative (Daily context) ────────────────────────────────────────
+model MarketSummary {
   id          String   @id @default(cuid())
-  source      String
-  headline    String
-  sentiment   String?  // BULLISH, BEARISH, NEUTRAL
-  summary     String?  @db.Text
-  url         String?
-  publishedAt DateTime
-  stockId     String?
-  stock       Stock?   @relation(fields: [stockId], references: [id])
+  date        DateTime @unique @default(now())
+  narrative   String   @db.Text // AI generated: "Nifty gained today because..."
+  topThemes   String[]          // ["Banking Rally", "IT Weakness"]
+  volatility  String?           // LOW | HIGH
 }
 
+// ─── Raw Macro Signals ──────────────────────────────────────────────────────
 model MacroSignal {
   id          String   @id @default(cuid())
-  name        String   // Oil Price, Interest Rate, Inflation, USD/INR
+  name        String   // Oil Price, USD/INR, etc.
   value       Float
   unit        String?
   change      Float?
-  impact      String?  @db.Text // AI analyzed impact
+  impact      String?  @db.Text // JSON string of ripple effects
   lastUpdated DateTime @default(now())
 }
 
-model Tweet {
-  id          String   @id @default(cuid())
-  content     String   @db.Text
-  sentiment   String?
-  author      String?
-  stockId     String
-  stock       Stock    @relation(fields: [stockId], references: [id])
-  createdAt   DateTime @default(now())
-}
-
-model RedditPost {
-  id          String   @id @default(cuid())
-  title       String   @db.Text
-  content     String?  @db.Text
-  sentiment   String?
-  subreddit   String?
-  stockId     String
-  stock       Stock    @relation(fields: [stockId], references: [id])
-  createdAt   DateTime @default(now())
-}
-
-model InstitutionalData {
-  id            String   @id @default(cuid())
-  ticker        String
-  fiiNetBuySell Float?
-  diiNetBuySell Float?
-  date          DateTime
-}
-
-model StockDependency {
-  id            String @id @default(cuid())
-  stockId       String
-  dependsOnId   String
-  stock         Stock  @relation("UpstreamRelation", fields: [stockId], references: [id])
-  dependsOn     Stock  @relation("DownstreamRelation", fields: [dependsOnId], references: [id])
-  impactFactor  Float? // How much dependence
-}
-
+// ─── Search Trends (Sentiment Engine) ───────────────────────────────────────
 model GoogleTrend {
   id            String   @id @default(cuid())
-  term          String   @unique // e.g., "Adani stock", "banking crisis"
-  score         Int      // Interest 0-100
+  term          String   @unique
+  score         Int
   isSpiking     Boolean  @default(false)
   lastUpdated   DateTime @default(now())
-}
-
-model AIInsight {
-  id                String   @id @default(cuid())
-  stockId           String
-  stock             Stock    @relation(fields: [stockId], references: [id])
-  summary           String   @db.Text
-  analysisType      String   // SENTIMENT, FUNDAMENTAL, DEEP_RESEARCH, MACRO_IMPACT
-  sentimentScore    Float?   // 0 to 100
-  intrinsicValue    Float?
-  recommendation    String?  // BUY, HOLD, SELL
-  impactChain       String?  @db.Text // Global Event Impact mapping
-  precomputedAt     DateTime @default(now())
-  expiresAt         DateTime
 }

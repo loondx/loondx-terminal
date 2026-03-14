@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { genOHLC, genLbls, calcMA, calcEMA, calcBB, calcVWAP } from '../utils/charting';
+import { genOHLC, genLbls, calcMA } from '../utils/charting';
 import { PanelHeader } from './PanelHeader';
 import { formatPrice, formatCompact } from '../utils/formatters';
 import { FinancialTable } from './FinancialTable';
@@ -14,37 +14,36 @@ interface TerminalBoardProps {
 export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockData, loading }) => {
   const [chartType] = useState('candle');
   const [tf, setTf] = useState('1M');
-  const [showIndicators, setShowIndicators] = useState({ MA: true, BB: false, VWAP: false, EMA: false });
+  const [showIndicators] = useState({ MA: true, BB: false, VWAP: false, EMA: false });
   const [activeMainTab, setActiveMainTab] = useState('CHART'); // CHART or FINANCIALS
   
   const [rightWidth, setRightWidth] = useState(330);
-  const [bottomHeight, setBottomHeight] = useState(250);
+  const [bottomHeight, setBottomHeight] = useState(200);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1280);
 
   const isBackend = !!stockData?.stock;
   const sd = isBackend ? stockData.stock : (stockData || { name: 'Loading...', price: 0, ticker: curStock });
-  const macro = stockData?.macroSignals || [];
+  const narrative = stockData?.narrative || null;
   const insights = sd.aiInsights?.[0] || null;
 
   const [livePrice, setLivePrice] = useState<number>(sd.price || 0);
 
   const pChartRef = useRef<HTMLCanvasElement>(null);
   const vChartRef = useRef<HTMLCanvasElement>(null);
-  const wChartRef = useRef<HTMLCanvasElement>(null);
   const pChartInst = useRef<Chart | null>(null);
   const vChartInst = useRef<Chart | null>(null);
-  const wChartInst = useRef<Chart | null>(null);
 
   useEffect(() => {
     if (sd.price) setLivePrice(sd.price);
     const itv = setInterval(() => {
       setLivePrice((prev: number) => {
         if (prev === 0) return sd.price || 0;
-        return Math.max(prev + (Math.random() - 0.499) * 0.11, 1);
+        // Subtle drift to keep it feeling 'live'
+        return prev + (Math.random() - 0.5) * 0.05;
       });
-    }, 4000);
+    }, 5000);
     return () => clearInterval(itv);
   }, [sd.price]);
 
@@ -83,120 +82,38 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
     };
   }, [isResizingRight, isResizingBottom]);
 
-  useEffect(() => {
-    if (loading || !sd.price) return;
-    if (pChartInst.current) pChartInst.current.destroy();
-    if (vChartInst.current) vChartInst.current.destroy();
-    if (wChartInst.current) wChartInst.current.destroy();
+  const [showOlderNews, setShowOlderNews] = useState(false);
+  const [showOlderFilings, setShowOlderFilings] = useState(false);
 
-    const t = requestAnimationFrame(() => {
-      const d = sd;
-      const ctxP = pChartRef.current?.getContext('2d');
-      const ctxV = vChartRef.current?.getContext('2d');
-      const ctxW = wChartRef.current?.getContext('2d');
-
-      const tfN: any = { '1D': 25, '5D': 50, '1M': 60, '3M': 90, '6M': 126, '1Y': 250, '5Y': 260 };
-      const n = tfN[tf] || 60;
-      const lp = d.price || 1300;
-      const ohlcD = genOHLC(n, lp);
-      // Anchor the FINAL candle to the LIVE price so chart ends exactly at current market price
-      if (ohlcD.length > 0) {
-        const last = ohlcD[ohlcD.length - 1];
-        last.c = lp;
-        last.h = Math.max(last.h, lp);
-        last.l = Math.min(last.l, lp);
-      }
-      const lbls = genLbls(n, tf);
-      const closes = ohlcD.map(x => x.c);
-
-      const ma20 = calcMA(closes, 20);
-      const ma50 = calcMA(closes, 50);
-      const ema21 = calcEMA(closes, 21);
-      const bb = calcBB(closes, 20);
-      const vwap = calcVWAP(ohlcD);
-      const vols = ohlcD.map(x => x.v);
-      const vcol = ohlcD.map(x => x.c >= x.o ? 'rgba(20,184,166,.5)' : 'rgba(239,68,68,.4)');
-
-      if (ctxP) {
-        let pDs: any;
-        if (chartType === 'line') {
-          pDs = { label: 'P', data: closes, type: 'line', borderColor: '#0ea5e9', borderWidth: 1.8, pointRadius: 0, fill: false, order: 10, tension: .2 };
-        } else if (chartType === 'area') {
-          const g = ctxP.createLinearGradient(0, 0, 0, 300);
-          g.addColorStop(0, 'rgba(14,165,233,.22)');
-          g.addColorStop(1, 'rgba(14,165,233,.01)');
-          pDs = { label: 'P', data: closes, type: 'line', borderColor: '#0ea5e9', borderWidth: 1.8, pointRadius: 0, fill: true, backgroundColor: g, order: 10, tension: .3 };
-        } else {
-          pDs = { label: 'P', data: closes, type: 'bar', backgroundColor: 'transparent', borderColor: 'transparent', barPercentage: .01, order: 10, ohlcD: ohlcD, chartT: chartType };
-        }
-        const ds = [pDs];
-        if (showIndicators.MA) {
-          ds.push({ label: 'MA20', data: ma20, type: 'line', borderColor: 'rgba(14,165,233,.8)', borderWidth: 1.2, pointRadius: 0, fill: false } as any);
-          ds.push({ label: 'MA50', data: ma50, type: 'line', borderColor: 'rgba(249,115,22,.6)', borderWidth: 1.2, pointRadius: 0, fill: false } as any);
-        }
-        if (showIndicators.BB) {
-          ds.push({ label: 'BB+', data: bb.u, type: 'line', borderColor: 'rgba(100,116,139,.3)', borderWidth: 1, borderDash: [5,5], pointRadius: 0, fill: false } as any);
-          ds.push({ label: 'BB-', data: bb.l, type: 'line', borderColor: 'rgba(100,116,139,.3)', borderWidth: 1, borderDash: [5,5], pointRadius: 0, fill: false } as any);
-        }
-        if (showIndicators.VWAP) ds.push({ label: 'VWAP', data: vwap, type: 'line', borderColor: 'rgba(234,179,8,.7)', borderWidth: 1, borderDash: [3,2], pointRadius: 0, fill: false } as any);
-        if (showIndicators.EMA) ds.push({ label: 'EMA21', data: ema21, type: 'line', borderColor: 'rgba(139,92,246,.7)', borderWidth: 1.2, pointRadius: 0, fill: false } as any);
-
-        pChartInst.current = new Chart(ctxP, {
-          type: 'bar',
-          data: { labels: lbls, datasets: ds },
-          options: {
-            responsive: true, maintainAspectRatio: false, animation: { duration: 400 },
-            plugins: { legend: { display: false }, tooltip: { enabled: true } },
-            scales: {
-              x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 12 }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } },
-              y: { 
-                position: 'right', 
-                ticks: { 
-                  color: '#64748b', 
-                  font: { size: 10 }, 
-                  callback: (v) => '₹' + formatPrice(Number(v)) 
-                }, 
-                grid: { color: 'rgba(23,32,56,.8)' }, 
-                border: { color: '#172038' } 
-              }
-            }
-          }
-        });
-      }
-      if (ctxV) {
-        vChartInst.current = new Chart(ctxV, {
-          type: 'bar',
-          data: { labels: lbls, datasets: [{ data: vols, backgroundColor: vcol, borderWidth: 0, borderRadius: 1 }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
-        });
-      }
-      if (ctxW) {
-        const bV = sd?.price || 1300;
-        const im = [bV*.92, bV, bV*.96, bV*1.08, bV*1.02, bV*1.16, bV*1.08, bV*1.22, bV*1.15, bV*1.28];
-        wChartInst.current = new Chart(ctxW, {
-          type: 'line',
-          data: { labels: ['1','2','3','4','5'], datasets: [{ data: im as any, borderColor: '#14b8a6', borderWidth: 2, tension: .2 }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
-        });
-      }
-    });
-    return () => cancelAnimationFrame(t);
-  }, [loading, curStock, stockData, tf, chartType, showIndicators, sd]);
+  const getRelativeTime = (date: Date) => {
+    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diff < 60) return 'Just now';
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  };
 
   const news = stockData?.liveNews?.length 
     ? stockData.liveNews.map((n: any) => ({ 
         h: n.headline || n.title, 
         src: n.source || 'LOONDX', 
-        time: n.publishedAt ? new Date(n.publishedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'LIVE', 
-        url: n.url 
+        time: n.publishedAt ? getRelativeTime(new Date(n.publishedAt)) : 'LIVE', 
+        rawDate: n.publishedAt ? new Date(n.publishedAt) : new Date(),
+        url: n.url,
+        isSector: !!n.isSectorNews
       })) 
     : [];
+
+  const filteredNews = showOlderNews ? news : news.filter((n: any) => {
+    const hours = (Date.now() - n.rawDate.getTime()) / (1000 * 60 * 60);
+    return hours <= 48;
+  });
 
   const social = stockData?.socialFeed?.length 
     ? stockData.socialFeed.map((s: any) => ({
         h: s.title,
         author: s.author || 'anon',
-        time: s.publishedAt ? new Date(s.publishedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Now',
+        time: s.publishedAt ? getRelativeTime(new Date(s.publishedAt)) : 'Now',
         url: s.url
       }))
     : [];
@@ -207,172 +124,454 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
         date: f.date || 'Recent',
         url: f.url,
         source: f.source || 'NSE',
+        rawDate: f.date ? new Date(f.date) : new Date(),
       }))
     : [];
 
-  const riskScore = insights?.sentimentScore || 50;
-  const riskNeedle = -90 + (riskScore / 100) * 180;
+  const filteredFilings = showOlderFilings ? filings : filings.filter((f: any) => {
+    const hours = (Date.now() - f.rawDate.getTime()) / (1000 * 60 * 60);
+    return hours <= 72;
+  });
+
+  const getScoreColor = (v: number) => {
+    if (v > 70) return 'text-brand-gr';
+    if (v < 40) return 'text-brand-re';
+    return 'text-brand-ye';
+  };
+
+  useEffect(() => {
+    if (loading || !sd.price) return;
+    if (pChartInst.current) pChartInst.current.destroy();
+    if (vChartInst.current) vChartInst.current.destroy();
+
+    const t = requestAnimationFrame(() => {
+      if (!pChartRef.current || !vChartRef.current) return;
+      const ctxP = pChartRef.current?.getContext('2d');
+      const ctxV = vChartRef.current?.getContext('2d');
+
+      const history = (sd.priceHistory || []).slice().reverse();
+      const n = tf === '1D' ? 24 : tf === '1M' ? 30 : tf === '1Y' ? 250 : history.length || 60;
+      
+      let ohlcD: any[] = [];
+      let lbls: string[] = [];
+
+      if (history.length > 5) {
+        // Use real history
+        const slice = history.slice(-n);
+        ohlcD = slice.map((h: any) => ({
+          o: h.open || h.close,
+          h: h.high || h.close,
+          l: h.low || h.close,
+          c: h.close,
+          v: h.volume || 1000000
+        }));
+        lbls = slice.map((h: any) => {
+          const dt = new Date(h.date);
+          return tf === '1D' ? dt.getHours() + ':00' : (dt.getMonth() + 1) + '/' + dt.getDate();
+        });
+      } else {
+        // Fallback to gen if no history - Ensure enough points for a graph
+        ohlcD = genOHLC(Math.max(n, 60), sd.price || 1200);
+        lbls = genLbls(Math.max(n, 60), tf);
+      }
+      
+      // Update last price to live price for 'alive' feel
+      if (ohlcD.length > 0) {
+        const last = ohlcD[ohlcD.length - 1];
+        const lp = livePrice || sd.price;
+        last.c = lp;
+        last.h = Math.max(last.h, lp * 1.001);
+        last.l = Math.min(last.l, lp * 0.999);
+      }
+
+      const closes = ohlcD.map(x => x.c);
+      const ma20 = calcMA(closes, 20);
+      const vols = ohlcD.map(x => x.v);
+      const vcol = ohlcD.map(x => x.c >= x.o ? 'rgba(20,184,166,0.6)' : 'rgba(239,68,68,0.5)');
+
+      if (ctxP) {
+        const g = ctxP.createLinearGradient(0, 0, 0, 300);
+        g.addColorStop(0, 'rgba(14,165,233, 0.25)');
+        g.addColorStop(0.5, 'rgba(14,165,233, 0.1)');
+        g.addColorStop(1, 'rgba(14,165,233, 0.01)');
+
+        pChartInst.current = new Chart(ctxP, {
+          type: 'line',
+          data: {
+            labels: lbls,
+            datasets: [
+              {
+                label: 'Price',
+                data: closes,
+                borderColor: '#38bdf8', // Brighter cyan
+                borderWidth: 2.5,
+                pointRadius: 0,
+                fill: true,
+                backgroundColor: g,
+                tension: 0.2,
+              },
+              {
+                label: 'MA20',
+                data: ma20,
+                borderColor: 'rgba(139, 92, 246, 0.4)',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: false,
+                borderDash: [4, 4],
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            animation: { duration: 1000, easing: 'easeOutQuart' },
+            plugins: { 
+              legend: { display: false }, 
+              tooltip: { 
+                enabled: true,
+                mode: 'index',
+                intersect: false,
+                backgroundColor: 'rgba(7, 12, 24, 0.95)',
+                titleFont: { size: 10, family: 'monospace', weight: 'bold' },
+                bodyFont: { size: 11, family: 'monospace' },
+                borderColor: 'rgba(56, 189, 248, 0.3)',
+                borderWidth: 1,
+                padding: 10,
+                displayColors: false
+              } 
+            },
+            scales: {
+              x: { 
+                ticks: { color: '#64748b', font: { size: 9, family: 'monospace' }, maxTicksLimit: 12 },
+                grid: { color: 'rgba(255,255,255,0.015)', drawTicks: false },
+                border: { display: false }
+              },
+              y: { 
+                position: 'right',
+                ticks: { 
+                  color: '#64748b', 
+                  font: { size: 10, family: 'monospace' }, 
+                  callback: (v) => '₹' + formatPrice(Number(v)),
+                  maxTicksLimit: 10
+                },
+                grid: { color: 'rgba(255,255,255,0.015)', drawTicks: false },
+                border: { display: false }
+              }
+            }
+          }
+        });
+      }
+
+      if (ctxV) {
+        vChartInst.current = new Chart(ctxV, {
+          type: 'bar',
+          data: { labels: lbls, datasets: [{ data: vols, backgroundColor: vcol, borderWidth: 0, borderRadius: 1, barPercentage: 0.8 }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: { x: { display: false }, y: { display: false } }
+          }
+        });
+      }
+    });
+    return () => cancelAnimationFrame(t);
+  }, [loading, curStock, stockData, tf, chartType, showIndicators, sd]);
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row bg-brand-bd overflow-hidden min-h-0 relative">
-      <div className="absolute top-0 left-0 right-0 h-[24px] bg-[rgba(7,12,24,.8)] backdrop-blur-md z-[60] border-b border-brand-bd flex items-center overflow-hidden">
-        <div className="flex animate-marquee whitespace-nowrap gap-[40px] px-4">
-          {macro.map((m: any, i: number) => (
-            <div key={i} className="flex items-center gap-2 font-mono text-[9px]">
-               <span className="text-brand-t4 uppercase">{m.name}:</span>
-               <span className="text-brand-t1 font-bold">{m.value}{m.unit}</span>
-               <span className={m.change >= 0 ? 'text-brand-gr' : 'text-brand-re'}>{m.change >= 0 ? '▲' : '▼'} {Math.abs(m.change)}%</span>
-            </div>
-          ))}
-          {!macro.length && <div className="text-brand-t4 text-[9px] uppercase tracking-widest">Global Macro Streams Synchronizing...</div>}
-        </div>
-      </div>
-
-      <button 
-        className={`absolute z-[100] w-[24px] h-[24px] bg-brand-bgc border border-brand-bd rounded-full flex items-center justify-center text-brand-t1 hover:text-brand-bl transition-all hover:scale-110 shadow-2xl ${showSidebar ? 'right-[318px]' : 'right-[10px]'} top-[100px]`}
-        onClick={() => setShowSidebar(!showSidebar)}
-      >
-        <span className="font-mono text-[14px] leading-none mb-[1px]">{showSidebar ? '→' : '←'}</span>
-      </button>
-
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0 pt-[24px]">
-        <div className="flex flex-col flex-1 overflow-y-auto bg-brand-bg min-h-0 scrollbar-none">
-          <div className="bg-brand-bgc border-b border-brand-bd flex items-center p-[8px_14px] gap-[20px] shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
-            <div className="flex items-center gap-[12px]"><div className="font-mono text-[20px] font-bold text-brand-bl uppercase tracking-tight">{curStock}</div><div className="text-[11px] text-brand-t2 font-medium">{sd.name}</div></div>
-            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{formatPrice(livePrice)}</div></div>
-            <div className="flex gap-2 ml-4">
-              {['CHART', 'FINANCIALS'].map(t => (
-                <button key={t} onClick={() => setActiveMainTab(t)} className={`font-mono text-[9px] px-3 py-1 rounded-full border transition-all ${activeMainTab === t ? 'bg-brand-bl border-brand-bl text-white shadow-[0_0_10px_rgba(14,165,233,0.3)]' : 'border-brand-bd text-brand-t4 hover:border-brand-t3'}`}>
-                  {t}
-                </button>
-              ))}
-            </div>
-            <div className="ml-auto flex gap-4 items-center">
-               {activeMainTab === 'CHART' && (
-                <>
-                  {['1D','1M','1Y'].map(v => <button key={v} className={`font-mono text-[10px] px-2 py-1 rounded border ${tf===v?'text-brand-bl border-brand-bl':'text-brand-t4 border-transparent'}`} onClick={() => setTf(v)}>{v}</button>)}
-                  <div className="w-[1px] h-[20px] bg-brand-bd"></div>
-                  {['MA','BB','VWAP'].map(i => (
-                    <button key={i} className={`font-mono text-[10px] px-2 py-1 rounded border ${(showIndicators as any)[i]?'text-brand-tl border-brand-tl bg-brand-tlg':'text-brand-t4 border-transparent'}`} onClick={() => setShowIndicators(prev => ({...prev, [i]: !(prev as any)[i]}))}>{i}</button>
-                  ))}
-                </>
-               )}
-               <div className="bg-brand-grg text-brand-gr font-mono text-[9px] font-bold px-[8px] py-[3px] rounded-[3px] border border-[rgba(34,197,94,.15)]">AI RATING: {insights?.recommendation || 'BULLISH'}</div>
+    <div className="flex-1 flex flex-col min-w-0 bg-brand-bg relative overflow-hidden">
+      
+      {/* ── MARKET NARRATIVE (Top Marquee) ── */}
+      {narrative && (
+        <div className="h-[28px] bg-brand-bgc border-b border-brand-bd flex items-center overflow-hidden shrink-0 z-50">
+          <div className="px-3 bg-brand-bl text-[9px] font-black italic text-white h-full flex items-center shrink-0 z-10 shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
+            DAILY PULSE
+          </div>
+          <div className="flex-1 overflow-hidden relative">
+            <div className="animate-marquee whitespace-nowrap flex items-center gap-12 py-1">
+              <span className="text-[10px] font-mono text-brand-t1 uppercase tracking-tight">
+                <span className="text-brand-bl mr-2">CONTEXT:</span> {narrative.narrative}
+              </span>
+              <span className="text-[10px] font-mono text-brand-t1 uppercase tracking-tight">
+                <span className="text-brand-bl mr-2">THEMES:</span> {narrative.topThemes?.join(' • ')}
+              </span>
             </div>
           </div>
-
-          <div className="flex-1 flex flex-col bg-brand-bgp overflow-hidden min-h-[300px]">
-            {activeMainTab === 'CHART' ? (
-              <>
-                <div className="flex-1 relative p-[10px] min-h-0 bg-[rgba(10,15,30,.2)]"><canvas ref={pChartRef} className="w-full h-full"></canvas></div>
-                <div className="h-[44px] px-[10px] border-t border-[rgba(255,255,255,.03)] bg-[rgba(7,12,24,.4)] shrink-0"><canvas ref={vChartRef} className="w-full h-full"></canvas></div>
-              </>
-            ) : (
-              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 scrollbar-custom bg-[rgba(7,12,24,0.3)]">
-                <FinancialTable title="Quarterly Results" data={sd.financials?.quarterly} />
-                <FinancialTable title="Profit & Loss" data={sd.financials?.profitLoss} />
-              </div>
-            )}
-          </div>
-
-          <div className="h-[3px] bg-brand-bd cursor-row-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingBottom(true)}></div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-brand-bd shrink-0 overflow-hidden" style={{ height: window.innerWidth > 1024 ? bottomHeight : 'auto' }}>
-            <div className="bg-brand-bgp flex flex-col min-h-0 overflow-hidden">
-              <PanelHeader label="AI DEEP RESEARCH" dot="bl" right={<span className="text-[9px] text-brand-t4 font-mono">LOONDX ENGINE</span>} />
-              <div className="flex-1 p-[14px] overflow-y-auto scrollbar-none font-medium text-[11px] leading-[1.6] text-brand-t2">
-                 {insights?.summary || "AI Analysis Engine initializing... Synchronizing deep market intelligence for Indian markets."}
-                 {insights?.impactChain && (
-                   <div className="mt-4 p-3 bg-brand-bgc border border-brand-bd rounded-[4px]">
-                      <div className="text-[8px] text-brand-tl uppercase font-bold mb-2 tracking-widest">Global Impact Chain</div>
-                      <div className="text-brand-t1 text-[10px] font-mono">{insights.impactChain}</div>
-                   </div>
-                 )}
-              </div>
-            </div>
-
-            <div className="bg-brand-bgp flex flex-col min-h-0 border-l border-brand-bd">
-              <PanelHeader label="VALUATION / DCF" dot="ye" />
-              <div className="flex-1 p-[14px] flex flex-col gap-4">
-                <div className="flex justify-between border-b border-brand-bd pb-2 font-mono">
-                   <div><div className="text-[8px] text-brand-t4 uppercase">Intrinsic Val</div><div className="text-[18px] font-bold text-brand-tl">₹{sd.intrinsicValue || (livePrice * 1.05).toFixed(1)}</div></div>
-                   <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Ref Price</div><div className="text-[18px] font-bold text-brand-t1">₹{livePrice.toFixed(2)}</div></div>
-                </div>
-                <div className="grid grid-cols-2 gap-y-3">
-                   {[{l:'ROE',v:sd.roe ? `${sd.roe}%` : '22.4%'},{l:'Mkt Cap',v:sd.marketCap ? `${sd.marketCap} Cr` : '--'},{l:'Debt/Eq',v:sd.debtToEquity || '0.4'},{l:'EPS',v:sd.eps || '--'}].map(i=>(
-                     <div key={i.l} className="flex flex-col"><span className="text-[8px] text-brand-t4 uppercase">{i.l}</span><span className="text-[11px] font-bold text-brand-t1 font-mono">{i.v}</span></div>
-                   ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-brand-bgp flex flex-col min-h-0 border-l border-brand-bd">
-              <PanelHeader label="ELLIOTT WAVE" dot="pu" />
-              <div className="flex-1 relative p-4"><canvas ref={wChartRef}></canvas></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {showSidebar && (
-        <div className="flex flex-col bg-brand-bgp shrink-0 overflow-hidden border-l border-brand-bd pt-[24px]" style={{ width: rightWidth }}>
-          <div className="flex-1 overflow-y-auto scrollbar-custom">
-            <div className="sticky top-0 z-30"><PanelHeader label="INTEL & SENTIMENT" dot="re" right={<span className="text-brand-re animate-pulse text-[9px] font-mono">● LIVE PULSE</span>} /></div>
-            <div className="p-4 bg-brand-bgc border-b border-brand-bd flex items-center justify-between">
-                <div className="flex flex-col">
-                   <div className="text-[8px] text-brand-t4 uppercase font-bold mb-2">Social Sentiment Gauge</div>
-                   <div className="flex items-center gap-2">
-                       <svg width="60" height="35" viewBox="0 0 100 60" className="opacity-80">
-                          <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" strokeWidth="12" />
-                          <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#22c55e" strokeWidth="12" strokeDasharray="125.6" strokeDashoffset={125.6 * (1 - riskScore/100)} />
-                          <g style={{ transformOrigin: '50px 50px', transform: `rotate(${riskNeedle}deg)` }}><line x1="50" y1="50" x2="50" y2="15" stroke="white" strokeWidth="3" /></g>
-                       </svg>
-                       <span className="text-[12px] font-bold text-brand-gr font-mono">{riskScore}%</span>
-                   </div>
-                </div>
-                <div className="text-right font-mono"><div className="text-[8px] text-brand-t4 uppercase mb-1">Vol 24h</div><div className="text-[11px] font-bold text-brand-t1">{formatCompact(sd.volume)}</div></div>
-            </div>
-            <div className="p-1 bg-brand-bgp">
-               {news.map((n: any, i: number) => (
-                 <a 
-                   key={i} 
-                   href={n.url} 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   className="block p-[12px] border-b border-brand-bd hover:bg-brand-bgc group transition-colors no-underline"
-                 >
-                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-bl group-hover:underline uppercase">{n.src}</span><span className="text-brand-t4">{n.time}</span></div>
-                    <div className="text-[11px] leading-[1.4] text-brand-t1 font-medium">{n.h}</div>
-                 </a>
-               ))}
-               {!news.length && <div className="p-4 text-center text-brand-t4 text-[10px]">No recent news available.</div>}
-            </div>
-
-            <div className="sticky top-0 z-20 border-t border-brand-bd"><PanelHeader label="SOCIAL PULSE (REDDIT)" dot="or" /></div>
-            <div className="p-1 bg-brand-bgp">
-               {social.map((s: any, i: number) => (
-                 <a 
-                   key={i} 
-                   href={s.url} 
-                   target="_blank" 
-                   rel="noopener noreferrer" 
-                   className="block p-[12px] border-b border-brand-bd hover:bg-brand-bgc group transition-colors no-underline"
-                 >
-                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-or group-hover:underline">u/{s.author}</span><span className="text-brand-t4">{s.time}</span></div>
-                    <div className="text-[10px] leading-[1.4] text-brand-t2 italic line-clamp-2">"{s.h}"</div>
-                 </a>
-               ))}
-               {!social.length && <div className="p-4 text-center text-brand-t4 text-[10px]">Scanning for social sentiment...</div>}
-            </div>
-
-            <div className="sticky top-0 z-20 border-t border-brand-bd"><PanelHeader label="INSTITUTIONAL" dot="bl" /></div>
-            <div className="p-4 grid grid-cols-2 gap-4 bg-brand-bgp border-b border-brand-bd">
-                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">FII Activity</div><div className="text-[14px] font-bold text-brand-gr font-mono">+{formatCompact(sd.marketCap * 0.001)} Cr</div></div>
-                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">DII Activity</div><div className="text-[14px] font-bold text-brand-re font-mono">-{formatCompact(sd.marketCap * 0.0005)} Cr</div></div>
-            </div>
+          <div className="px-3 border-l border-brand-bd font-mono text-[9px] text-brand-t3 shrink-0">
+            VOLATILITY: <span className={narrative.volatility === 'HIGH' ? 'text-brand-re' : 'text-brand-gr'}>{narrative.volatility}</span>
           </div>
         </div>
       )}
+
+      {/* ── MAIN CONTENT AREA (Constrained Viewport) ── */}
+      <div className="flex-1 flex min-h-0 overflow-hidden relative">
+        <div className="flex-[3] flex flex-col min-w-0 min-h-0 overflow-hidden relative">
+          
+          {/* Dashboard Header - Enhanced for Insight */}
+          <div className="p-3 md:p-4 flex flex-wrap items-center justify-between gap-4 border-b border-[rgba(255,255,255,0.035)] bg-gradient-to-b from-[#070c18] to-transparent shrink-0 min-h-[70px] max-h-[140px] overflow-hidden">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-2">
+                  <span className="text-lg md:text-xl font-black tracking-tighter text-brand-t1 leading-none">{sd.name}</span>
+                <span className="px-1.5 py-0.5 bg-brand-bgc border border-brand-bd rounded text-[8px] font-bold text-brand-t3 font-mono">{sd.ticker}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-mono font-black tracking-tighter text-brand-t1">₹{formatPrice(livePrice)}</span>
+                  <span className={`text-xs font-bold font-mono ${sd.change >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>
+                    {sd.change >= 0 ? '+' : ''}{sd.change?.toFixed(2)} ({sd.changePercent?.toFixed(2)}%)
+                  </span>
+                </div>
+                
+                <div className="w-[1px] h-8 bg-brand-bd mx-2 hidden sm:block" />
+                
+                {/* ADVANCED INSIGHT SCORES - Hide if no insights */}
+                {insights && (
+                  <div className="hidden lg:flex items-center gap-6">
+                    <div className="flex flex-col">
+                      <span className="text-[8px] text-brand-t4 uppercase font-bold tracking-widest mb-0.5">Valuation</span>
+                      <span className={`font-mono text-[14px] font-black leading-none ${getScoreColor(insights?.valuationScore || 50)}`}>
+                        {insights?.valuationScore || 50}<span className="text-[9px] opacity-40">/100</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[8px] text-brand-t4 uppercase font-bold tracking-widest mb-0.5">Growth</span>
+                      <span className={`font-mono text-[14px] font-black leading-none ${getScoreColor(insights?.growthScore || 50)}`}>
+                        {insights?.growthScore || 50}<span className="text-[9px] opacity-40">/100</span>
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[8px] text-brand-t4 uppercase font-bold tracking-widest mb-0.5">Risk</span>
+                      <span className={`font-mono text-[14px] font-black leading-none ${getScoreColor(100 - (insights?.riskScore || 50))}`}>
+                        {insights?.riskScore > 60 ? 'CAUTION' : 'STABLE'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-4 ml-auto lg:ml-0">
+               <div className={`px-5 py-3 rounded-[6px] border flex flex-col items-center justify-center transition-all shadow-[0_4px_20px_rgba(0,0,0,0.3)] ${
+                 insights?.recommendation === 'BUY' ? 'bg-[rgba(34,197,94,0.08)] border-brand-gr text-brand-gr' :
+                 insights?.recommendation === 'SELL' ? 'bg-[rgba(239,68,68,0.08)] border-brand-re text-brand-re' :
+                 'bg-[rgba(148,163,184,0.08)] border-brand-t3 text-brand-t3'
+               }`}>
+                 <span className="text-[8px] font-black uppercase tracking-[0.2em] mb-1 opacity-60">Insight AI</span>
+                 <span className="text-xl font-black italic tracking-tighter leading-none">{insights?.recommendation || 'NEUTRAL'}</span>
+               </div>
+            </div>
+          </div>
+
+          {/* MAIN VIEWPORT (Chart / Financials) */}
+          <div className="flex-1 flex flex-col bg-brand-bg min-h-0 overflow-hidden">
+            {/* Sub-tabs Selection */}
+            <div className="bg-brand-bgc border-b border-brand-bd flex items-center p-[6px_14px] gap-[10px] shrink-0">
+              <div className="flex gap-1">
+                {['CHART', 'FINANCIALS'].map(t => (
+                  <button key={t} onClick={() => setActiveMainTab(t)} className={`font-mono text-[9px] font-bold px-4 py-1 rounded transition-all ${activeMainTab === t ? 'bg-brand-bl text-white' : 'text-brand-t4 hover:bg-brand-bge'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <div className="ml-auto flex items-center gap-3">
+                 {activeMainTab === 'CHART' && (
+                    <div className="flex items-center gap-2">
+                      {['1D','1M','1Y'].map(v => <button key={v} onClick={() => setTf(v)} className={`text-[10px] font-mono px-2 py-0.5 rounded ${tf===v?'text-brand-bl bg-brand-blg border border-brand-bl':'text-brand-t4'}`}>{v}</button>)}
+                    </div>
+                 )}
+                 <div className="w-[1px] h-[16px] bg-brand-bd"></div>
+                 <div className="flex items-center gap-1">
+                    <span className="text-[9px] font-mono text-brand-t4 uppercase tracking-widest">Data:</span>
+                    <span className="text-[9px] font-mono text-brand-t2">YAHOO + SCREENER</span>
+                 </div>
+              </div>
+            </div>
+
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+               {activeMainTab === 'CHART' ? (
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <div className="flex-1 relative bg-[rgba(10,15,30,0.15)] min-h-[100px] max-h-[35%] border-b border-[rgba(255,255,255,0.02)] overflow-hidden">
+                      <canvas ref={pChartRef} className="absolute inset-0 w-full h-full"></canvas>
+                    </div>
+                    <div className="flex-none h-[40px] px-2 bg-[rgba(4,7,12,0.4)] overflow-hidden relative border-t border-brand-bd/20 border-b border-brand-bd/20">
+                      <canvas ref={vChartRef} className="absolute inset-0 w-full h-full px-2"></canvas>
+                    </div>
+                  </div>
+               ) : (
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-10 flex flex-col scrollbar-custom bg-[rgba(4,7,12,0.4)]">
+                  <div className="max-w-[1400px] w-full mx-auto flex flex-col gap-10 pb-32">
+                    <FinancialTable title="Quarterly Financial Snapshot" data={sd.financials?.quarterly} />
+                    <FinancialTable title="Annual Profit & Loss Trend" data={sd.financials?.profitLoss} />
+                    
+                    {/* Safe area footer */}
+                    <div className="py-12 flex flex-col items-center gap-2 opacity-30 grayscale pointer-events-none">
+                        <div className="w-16 h-[1px] bg-brand-t4"></div>
+                        <span className="text-[10px] font-mono tracking-widest uppercase text-brand-t4">Data Integrity Terminal Lock</span>
+                    </div>
+                  </div>
+                </div>
+               )}
+              </div>
+          </div>
+
+          {/* BOTTOM INTELLIGENCE SECTION - Locked Visibility Engineering */}
+          <div className="flex-[2] flex flex-col overflow-hidden relative z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] bg-[#070c18] border-t border-brand-bd"
+            style={{ 
+               height: window.innerWidth > 1024 ? `${Math.floor(Math.max(bottomHeight, 240))}px` : '35vh',
+               minHeight: '180px',
+               maxHeight: '45vh'
+            }}>
+            <div className="h-[3px] w-full bg-brand-bd cursor-row-resize hover:bg-brand-bl transition-colors z-30 shrink-0" onMouseDown={() => setIsResizingBottom(true)}></div>
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-3 h-full divide-x divide-brand-bd overflow-hidden px-1">
+                
+                {/* Insight 1: Strategic Summary */}
+              <div className="flex flex-col min-h-0 overflow-hidden">
+                <PanelHeader label="STRATEGIC SUMMARY" dot="bl" right={<span className="text-[9px] font-mono text-brand-t4">AI ENGINE 3.5</span>} />
+                <div className="flex-1 p-4 overflow-y-auto scrollbar-custom pb-16">
+                  <p className="text-[11px] leading-[1.6] text-brand-t1 font-medium italic opacity-90 indent-4 min-h-[60px]">
+                    {!insights ? (
+                      <span className="animate-pulse text-brand-t3">LOONDX Neural clusters are synchronizing depth analysis metrics for this instrument...</span>
+                    ) : (
+                      insights.summary || "Aggregating deep structural analysis and quantitative narratives for this instrument... Terminal synchronization in progress."
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Insight 2: Impact Chain & Risks */}
+              <div className="flex flex-col min-h-0 overflow-hidden">
+                <PanelHeader label="EVENT IMPACT CHAIN" dot="or" />
+                <div className="flex-1 p-4 overflow-y-auto scrollbar-custom flex flex-col gap-3 pb-10">
+                  <div className="p-2.5 bg-brand-bg border border-brand-bd rounded-[4px]">
+                    <div className="text-[8px] text-brand-t4 font-black uppercase tracking-widest mb-1">Market Narrative</div>
+                    <div className="text-[10px] text-brand-t2 leading-normal">
+                      {!insights ? (
+                        <span className="animate-pulse text-brand-t3/80">Tracing catalyst origins...</span>
+                      ) : (
+                        insights.impactChain || "Primary trend driven by intra-day volume spike and sector tailwinds."
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="p-2 bg-[rgba(14,165,233,0.03)] border border-[rgba(14,165,233,0.1)] rounded-[4px]">
+                      <div className="text-[7px] text-brand-bl font-black uppercase mb-0.5">Sector Correlation</div>
+                      <div className="text-[10px] text-brand-t1 font-bold">Stable Trend</div>
+                    </div>
+                    <div className={`p-2 border rounded-[4px] ${(insights?.riskScore || 0) > 50 ? 'bg-[rgba(239,68,68,0.03)] border-[rgba(239,68,68,0.1)]' : 'bg-[rgba(34,197,94,0.03)] border-[rgba(34,197,94,0.1)]'}`}>
+                      <div className={`text-[7px] font-black uppercase mb-0.5 ${(insights?.riskScore || 0) > 50 ? 'text-brand-re' : 'text-brand-gr'}`}>Risk Level</div>
+                      <div className="text-[10px] text-brand-t1 font-bold capitalize">{(insights?.riskScore || 0) > 50 ? 'High Attention' : 'Low Profile'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Insight 3: Quick Terminal Pulse */}
+              <div className="flex flex-col min-h-0 overflow-hidden">
+                <PanelHeader label="QUANTITATIVE PULSE" dot="tl" />
+                <div className="flex-1 p-4 flex flex-col gap-3 overflow-y-auto pb-10">
+                   <div className="flex justify-between items-center py-1.5 border-b border-[rgba(255,255,255,0.02)]">
+                      <span className="text-[10px] text-brand-t3 font-bold uppercase">ROE (TTM)</span>
+                      <span className="text-[11px] font-mono font-black text-brand-t1">{sd.roe || '--'}%</span>
+                   </div>
+                   <div className="flex justify-between items-center py-1.5 border-b border-[rgba(255,255,255,0.02)]">
+                      <span className="text-[10px] text-brand-t3 font-bold uppercase">Debt/Equity</span>
+                      <span className="text-[11px] font-mono font-black text-brand-t1">{sd.debtToEquity || '--'}</span>
+                   </div>
+                    <div className="text-[11px] font-mono font-black text-brand-t1">₹{formatCompact(sd.marketCap)} Cr</div>
+                 </div>
+                 <div className="mt-auto flex items-center gap-2 p-1.5 bg-brand-bg border border-dashed border-brand-bd rounded text-[9px] text-brand-t4 font-mono leading-tight">
+                    <span className="text-brand-bl">ℹ</span>
+                    {!insights ? "Awaiting neural cluster synchronization..." : "Live data clusters synchronized with institutional feeds."}
+                 </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── SIDEBAR (Right) ── */}
+        <div 
+          className={`flex-[1] min-w-[280px] bg-brand-bg border-l border-brand-bd flex flex-col transition-all duration-300 relative z-40 ${showSidebar ? '' : 'hidden pointer-events-none'}`} 
+          style={{ maxWidth: rightWidth }}
+        >
+          <div className="absolute left-[-2px] top-0 bottom-0 w-[4px] cursor-col-resize hover:bg-brand-bl transition-colors z-50" onMouseDown={() => setIsResizingRight(true)}></div>
+          
+          <div className="flex-1 overflow-y-auto flex flex-col scrollbar-custom bg-brand-bg">
+            {/* Filings Section */}
+            <div className="sticky top-0 z-20 bg-brand-bg border-b border-brand-bd flex-shrink-0">
+              <PanelHeader 
+                label="EXCHANGE FILINGS" 
+                dot="pu" 
+                right={<button onClick={() => setShowOlderFilings(!showOlderFilings)} className="text-[8px] text-brand-bl uppercase font-black hover:underline">{showOlderFilings ? 'RECENT' : 'ALL'}</button>} 
+              />
+            </div>
+            <div className="flex flex-col divide-y divide-[rgba(255,255,255,0.02)] shrink-0 bg-[#060a16]">
+              {filteredFilings.map((f: any, i: number) => (
+                <a key={i} href={f.url} target="_blank" rel="noreferrer" className="p-4 hover:bg-[rgba(139,92,246,0.04)] transition-all group border-l-2 border-transparent hover:border-brand-pu">
+                  <div className="text-[11px] font-black text-brand-t1 mb-2 leading-snug group-hover:text-brand-bl transition-colors uppercase tracking-tight line-clamp-2">{f.h}</div>
+                  <div className="flex justify-between items-center text-[9px] font-mono">
+                    <span className="text-brand-t4 font-black uppercase bg-brand-bgc px-1.5 py-0.5 rounded border border-brand-bd/20">{f.source}</span>
+                    <span className="text-brand-t4">{f.date}</span>
+                  </div>
+                </a>
+              ))}
+              {!loading && filings.length === 0 && <div className="p-12 text-center text-brand-t4 text-[10px] font-mono flex flex-col gap-2 items-center opacity-60">📡 <br/>No recent corporate disclosures detected on NSE cluster.</div>}
+              {loading && <div className="p-8 text-center text-brand-t4 text-[9px] font-mono flex flex-col gap-2 items-center leading-relaxed">📡 <br/>Scanning NSE Servers for recent corporate disclosures...</div>}
+            </div>
+
+            {/* News Section */}
+            <div className="sticky top-0 z-20 bg-brand-bg border-y border-brand-bd flex-shrink-0">
+              <PanelHeader 
+                label="INTELLIGENCE PULSE" 
+                dot="gr" 
+                right={<button onClick={() => setShowOlderNews(!showOlderNews)} className="text-[8px] text-brand-bl uppercase font-black hover:underline">{showOlderNews ? '48H' : 'HISTORICAL'}</button>} 
+              />
+            </div>
+            <div className="flex flex-col divide-y divide-[rgba(255,255,255,0.02)] shrink-0 bg-[#060a16]">
+              {filteredNews.map((n: any, i: number) => (
+                <a key={i} href={n.url} target="_blank" rel="noreferrer" className={`p-4 hover:bg-[rgba(34,197,94,0.04)] transition-all group border-l-2 border-transparent hover:border-brand-gr ${n.isSector ? 'bg-[rgba(14,165,233,0.01)]' : ''}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {n.isSector && <span className="text-[7px] font-black bg-brand-blg text-brand-bl px-1 py-0.5 rounded border border-brand-bl/20 uppercase tracking-tighter shrink-0">SECTOR</span>}
+                    <div className="text-[11px] font-black text-brand-t1 leading-relaxed opacity-90 group-hover:opacity-100 group-hover:text-brand-bl line-clamp-2">{n.h}</div>
+                  </div>
+                  <div className="flex justify-between items-center text-[9px] font-mono font-black">
+                    <span className="text-brand-t3 truncate max-w-[120px] uppercase">{n.src}</span>
+                    <span className="text-brand-t4">{n.time}</span>
+                  </div>
+                </a>
+              ))}
+              {!news.length && <div className="p-8 text-center text-brand-t4 text-[9px] font-mono">Aggregating Global Fin-News feeds...</div>}
+            </div>
+
+            {/* Social pulse Section */}
+            <div className="sticky top-0 z-20 bg-brand-bg border-y border-brand-bd flex-shrink-0">
+              <PanelHeader label="SOCIAL PULSE" dot="or" />
+            </div>
+            <div className="flex flex-col divide-y divide-[rgba(255,255,255,0.02)] shrink-0 bg-[#060a16]">
+               {social.map((s: any, i: number) => (
+                  <a key={i} href={s.url} target="_blank" rel="noreferrer" className="p-4 hover:bg-[rgba(249,115,22,0.04)] transition-all group border-l-2 border-transparent hover:border-brand-or">
+                     <div className="text-[11px] font-bold text-brand-t2 leading-snug line-clamp-2 mb-2 group-hover:text-brand-t1">{s.h}</div>
+                     <div className="flex justify-between items-center text-[8px] font-mono font-black text-brand-t4">
+                        <span className="truncate max-w-[100px]">u/{s.author}</span>
+                        <span>{s.time}</span>
+                     </div>
+                  </a>
+               ))}
+               {!social.length && <div className="p-6 text-center text-brand-t4 text-[9px] font-mono">No subreddits tracking this ticker.</div>}
+            </div>
+
+            <div className="sticky top-0 z-20 border-t border-brand-bd flex-shrink-0 bg-brand-bg">
+              <PanelHeader label="EST. INST. SIGNAL" dot="bl" />
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-4 bg-brand-bgp">
+                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">FII Est. Signal</div><div className="text-[13px] font-bold text-brand-gr font-mono">+{formatCompact((sd.marketCap || 100000) * 0.0012)} Cr</div></div>
+                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">DII Est. Signal</div><div className="text-[13px] font-bold text-brand-re font-mono">-{formatCompact((sd.marketCap || 100000) * 0.0006)} Cr</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

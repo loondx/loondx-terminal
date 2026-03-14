@@ -1,4 +1,5 @@
 import { fetchClient } from './api.config';
+
 /**
  * StockDataService
  * Handles core stock price and metric fetching from the LOONDX Backend.
@@ -23,6 +24,19 @@ class StockService {
     } catch (e) {
       console.error('Failed to fetch market status:', e);
       return { macro: [], trends: [], topGainers: [] };
+    }
+  }
+
+  async refreshStock(ticker: string) {
+    return fetchClient<any>(`/terminal/refresh/${ticker}`, { method: 'POST' });
+  }
+
+  async getInitData() {
+    try {
+      return await fetchClient<any>('/terminal/init');
+    } catch (e) {
+      console.error('Failed to fetch init market data:', e);
+      return null;
     }
   }
 }

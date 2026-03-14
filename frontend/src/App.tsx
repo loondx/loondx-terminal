@@ -10,6 +10,7 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { Topbar } from './components/Topbar';
 import { TerminalBoard } from './components/TerminalBoard';
 import { IntelligenceBoard } from './components/IntelligenceBoard';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { Toast } from './components/Toast';
 import { stockService } from './services/stock.service';
 import './index.css';
@@ -17,18 +18,18 @@ import './index.css';
 type ViewMode = 'TERMINAL' | 'INTELLIGENCE';
 
 const App: React.FC = () => {
-  const [loading, setLoading] = useState(true);
-  const [curStock, setCurStock] = useState(() => {
-    // Restore the last-viewed ticker from localStorage on refresh
-    return localStorage.getItem('loondx_last_stock') || 'RELIANCE.NS';
-  });
+  const [loading, setLoading] = useState(false);
+  // null = no stock selected → show WelcomeScreen
+  const [curStock, setCurStock] = useState<string | null>(
+    localStorage.getItem('loondx_last_stock') || null
+  );
   const [stockData, setStockData] = useState<any>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('TERMINAL');
   const [toastMsg, setToastMsg] = useState('');
 
-  // Initial load
+  // Fetch on first load if a stock was persisted
   useEffect(() => {
-    handleStockChange(curStock);
+    if (curStock) handleStockChange(curStock);
   }, []);
 
   const showToast = useCallback((msg: string) => {
@@ -41,12 +42,18 @@ const App: React.FC = () => {
   }, []);
 
   const handleStockChange = useCallback((ticker: string) => {
+    if (!ticker) return;
     setLoading(true);
     setCurStock(ticker);
     localStorage.setItem('loondx_last_stock', ticker); // persist for refresh
     
     stockService.getStockData(ticker)
       .then((data) => {
+        // If the backend resolved a canonical ticker (e.g. INFY for INFOSYS), sync it
+        if (data?.stock?.ticker && data.stock.ticker !== ticker) {
+          setCurStock(data.stock.ticker);
+          localStorage.setItem('loondx_last_stock', data.stock.ticker);
+        }
         setStockData(data);
         setLoading(false);
       })
@@ -69,12 +76,12 @@ const App: React.FC = () => {
         id="app"
         className="h-screen flex flex-col overflow-hidden bg-brand-bg relative"
       >
-        {loading && (
+        {loading && curStock && (
           <LoadingScreen key={`${curStock}-${viewMode}`} curStock={curStock} onComplete={handleLoadComplete} />
         )}
 
         <Topbar
-          curStock={curStock}
+          curStock={curStock ?? ''}
           setCurStock={handleStockChange}
           viewMode={viewMode}
           setViewMode={handleViewChange}
@@ -82,8 +89,10 @@ const App: React.FC = () => {
         />
 
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          {viewMode === 'TERMINAL' ? (
-            <TerminalBoard curStock={curStock} stockData={stockData} loading={loading} />
+          {!curStock ? (
+            <WelcomeScreen onSelect={handleStockChange} />
+          ) : viewMode === 'TERMINAL' ? (
+            <TerminalBoard key={curStock} curStock={curStock} stockData={stockData} loading={loading} />
           ) : (
             <IntelligenceBoard curStock={curStock} />
           )}

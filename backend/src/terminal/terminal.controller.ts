@@ -1,9 +1,9 @@
-import { Controller, Get, Param, NotFoundException, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Post, Param, Body, NotFoundException, Logger } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PrismaService } from '../prisma.service';
-import { MarketService } from '../market/market.service';
 import { ScraperService } from '../market/scraper.service';
 import { CacheService } from '../cache.service';
+import { AIService } from '../ai/ai.service';
 
 @ApiTags('terminal')
 @Controller('api/terminal')
@@ -12,205 +12,264 @@ export class TerminalController {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly marketService: MarketService,
     private readonly scraperService: ScraperService,
     private readonly cacheService: CacheService,
+    private readonly aiService: AIService,
   ) {}
 
-  @Get('dashboard/:ticker')
-  @ApiOperation({ summary: 'Get full dashboard data package for a specific stock' })
-  async getDashboardData(@Param('ticker') ticker: string) {
-    const ucTicker = ticker.toUpperCase();
-    
-    let stock = await this.prisma.stock.findUnique({
-      where: { ticker: ucTicker },
-      include: {
-        sector: true,
-        aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
-        upstream: { include: { dependsOn: true } },
-        downstream: { include: { stock: true } },
-      },
-    });
+  // ─── GET /api/terminal/init ──────────────────────────────────────────────────
+  @Get('init')
+  @ApiOperation({ summary: 'Initial market summary for the landing page' })
+  async getInit() {
+    return this.getCached('market:init', async () => {
+      const [recent, gainers, losers, macro, summary] = await Promise.all([
+        // Recently researched/updated
+        this.prisma.stock.findMany({ 
+          take: 6, 
+          orderBy: { lastUpdated: 'desc' },
+          select: { ticker: true, name: true, price: true, changePercent: true, exchange: true }
+        }),
+        // Top Gainers
+        this.prisma.stock.findMany({ 
+          take: 5, 
+          orderBy: { changePercent: 'desc' },
+          select: { ticker: true, name: true, price: true, changePercent: true }
+        }),
+        // Top Losers
+        this.prisma.stock.findMany({ 
+          take: 5, 
+          orderBy: { changePercent: 'asc' },
+          select: { ticker: true, name: true, price: true, changePercent: true }
+        }),
+        // Macro Signals
+        this.prisma.macroSignal.findMany({ take: 3, orderBy: { lastUpdated: 'desc' } }),
+        // Market Summary
+        this.getMarketNarrative()
+      ]);
 
-    if (!stock) {
-      this.logger.log(`Stock ${ucTicker} not found. Attempting to fetch institutional data...`);
-      try {
-        stock = await this.fetchAndSaveStock(ucTicker);
-      } catch (e) {
-        throw new NotFoundException(`Stock ${ucTicker} not found.`);
+      return { recent, gainers, losers, macro, summary };
+    }, 300); // 5 min cache
+  }
+
+  // ─── GET /api/terminal/dashboard/:ticker ────────────────────────────────────
+  @Get(['dashboard/:ticker', 'intelligence/:ticker'])
+  @ApiOperation({ summary: 'Full intelligence package for a ticker' })
+  async getDashboard(@Param('ticker') ticker: string) {
+    const key = ticker.toUpperCase().split('.')[0];
+
+    let stock = await this.prisma.stock.findUnique({
+      where: { ticker: key },
+      include: {
+        sector:     true,
+        aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
+        priceHistory: { orderBy: { date: 'desc' }, take: 300 },
+      },
+    }) as any;
+
+    const isStale = !stock || (Date.now() - stock.lastUpdated.getTime() > 15 * 60 * 1000); // 15 min stale
+
+    try {
+      if (!stock || isStale) {
+        stock = await this.fetchAndPersist(key);
       }
+    } catch (e) {
+      this.logger.error(`Failed to refresh stock ${key}: ${e.message}`);
+      if (!stock) throw new NotFoundException(`Stock ${key} not found and failed to fetch.`);
     }
 
-    // EPHEMERAL DATA — Redis Cached, NOT stored in DB
-    const newsCacheKey    = `news:${ucTicker}`;
-    const socialCacheKey  = `social:${ucTicker}`;
-    const filingsCacheKey = `filings:${ucTicker}`;
+    const companyName = stock.name;
+    const sectorName = stock.sector?.name;
 
-    // Run all three cache reads in parallel
-    let [liveNews, socialFeed, exchangeFilings] = await Promise.all([
-      this.cacheService.get<any[]>(newsCacheKey),
-      this.cacheService.get<any[]>(socialCacheKey),
-      this.cacheService.get<any[]>(filingsCacheKey),
+    const [liveNews, socialFeed, exchangeFilings, narrative] = await Promise.all([
+      this.getCached(`news:${key}`,    () => this.scraperService.scrapeNews(key, companyName, sectorName), 600),
+      this.getCached(`social:${key}`,  () => this.scraperService.scrapeReddit(key, sectorName),            600),
+      this.getCached(`filings:${key}`, () => this.scraperService.scrapeExchangeFilings(key),  1800),
+      this.getMarketNarrative(),
     ]);
 
-    // Fetch any misses in parallel too
-    const fetches: Promise<void>[] = [];
-
-    if (!liveNews) {
-      fetches.push(
-        this.scraperService.scrapeNews(ucTicker).then(async (data) => {
-          liveNews = data;
-          await this.cacheService.set(newsCacheKey, data, 600); // 10 min
-        }),
-      );
-    }
-
-    if (!socialFeed) {
-      fetches.push(
-        this.scraperService.scrapeReddit(ucTicker).then(async (data) => {
-          socialFeed = data;
-          await this.cacheService.set(socialCacheKey, data, 600); // 10 min
-        }),
-      );
-    }
-
-    if (!exchangeFilings) {
-      fetches.push(
-        this.scraperService.scrapeExchangeFilings(ucTicker).then(async (data) => {
-          exchangeFilings = data;
-          await this.cacheService.set(filingsCacheKey, data, 1800); // 30 min — filings change slowly
-        }),
-      );
-    }
-
-    await Promise.allSettled(fetches);
-
-    const macroSignals = await this.prisma.macroSignal.findMany();
+    const macroSignals = await this.prisma.macroSignal.findMany({ orderBy: { lastUpdated: 'desc' } });
 
     return {
       stock,
-      liveNews:        liveNews        || [],
-      socialFeed:      socialFeed      || [],
-      exchangeFilings: exchangeFilings || [],
+      liveNews,
+      socialFeed,
+      exchangeFilings,
       macroSignals,
+      narrative,
       serverTime: new Date(),
     };
   }
 
-  private async fetchAndSaveStock(ticker: string) {
+  // ─── GET /api/terminal/narrative ─────────────────────────────────────────────
+  @Get('narrative')
+  async getMarketNarrative() {
     try {
-      this.logger.log(`Fetching comprehensive data for ${ticker}...`);
-      
-      // Fetch from both sources
-      const details = await this.marketService.getStockDetails(ticker);
-      const realData = await this.scraperService.scrapeScreener(ticker);
+      return await this.getCached('market:narrative', async () => {
+        const topStocks = await this.prisma.stock.findMany({ 
+          orderBy: { changePercent: 'desc' }, 
+          take: 10 
+        });
+        const macro = await this.prisma.macroSignal.findMany();
+        const aiResult = await this.aiService.generateMarketNarrative(topStocks, macro);
+        
+        return await this.prisma.marketSummary.upsert({
+          where: { date: new Date() },
+          update: { narrative: aiResult.narrative, topThemes: aiResult.topThemes, volatility: aiResult.volatility },
+          create: { narrative: aiResult.narrative, topThemes: aiResult.topThemes, volatility: aiResult.volatility },
+        });
+      }, 3600); // Cache for 1 hour
+    } catch (err) {
+      this.logger.error(`Failed to generate market narrative: ${err.message}`);
+      return { narrative: 'Market narrative synchronization in progress...', topThemes: [], volatility: 'STABLE' };
+    }
+  }
 
-      // Merge data: Use realData (Screener) as primary for Indian stocks price/name
-      const finalPrice = realData?.price || details.price;
-      const finalName = realData?.name || details.name || ticker.split('.')[0];
-      const finalChange = details.change_percent || 0; // Screener doesn't give us easy change %, we keep detail's change or 0
+  // ─── GET /api/terminal/stocks ────────────────────────────────────────────────
+  @Get('stocks')
+  @ApiOperation({ summary: 'All persisted stocks (for search autocomplete)' })
+  async getAllStocks() {
+    return this.prisma.stock.findMany({
+      select: {
+        ticker:       true,
+        name:         true,
+        exchange:     true,
+        price:        true,
+        changePercent: true,
+        marketCap:    true,
+        lastUpdated:  true,
+      },
+      orderBy: { lastUpdated: 'desc' },
+    });
+  }
 
-      const lastProfit = realData?.financials?.quarterly?.rows?.['Net Profit']?.slice(-1)[0];
-      const profitVal = typeof lastProfit === 'number' ? lastProfit : 0;
+  // ─── GET /api/terminal/market-status ────────────────────────────────────────
+  @Get('market-status')
+  @ApiOperation({ summary: 'Macro signals + top movers' })
+  async getMarketStatus() {
+    const [macro, topGainers, topLosers] = await Promise.all([
+      this.prisma.macroSignal.findMany({ orderBy: { lastUpdated: 'desc' } }),
+      this.prisma.stock.findMany({ orderBy: { changePercent: 'desc' }, take: 5 }),
+      this.prisma.stock.findMany({ orderBy: { changePercent: 'asc'  }, take: 5 }),
+    ]);
+    return { macro, topGainers, topLosers };
+  }
 
-      const stock = await this.prisma.stock.create({
-        data: {
-          ticker,
-          name: finalName,
-          price: finalPrice,
-          changePercent: finalChange,
-          volume: details.volume,
-          roe: realData?.roe || (Math.random() * 20 + 5),
-          debtToEquity: realData?.debtToEquity || Math.random(),
-          eps: realData?.eps || (Math.random() * 100),
-          marketCap: realData?.marketCap || (Math.random() * 1000000),
-          financials: (realData?.financials as any) || {},
-          newsData: (realData?.announcements as any) || [],
+  // ─── POST /api/terminal/refresh/:ticker ─────────────────────────────────────
+  @Post('refresh/:ticker')
+  @ApiOperation({ summary: 'Force-refresh a ticker (price + fundamentals + AI)' })
+  async refreshStock(@Param('ticker') ticker: string) {
+    const key = ticker.toUpperCase().split('.')[0];
+
+    // Delete existing so fetchAndPersist creates fresh
+    await this.prisma.stock.deleteMany({ where: { ticker: key } });
+
+    // Also clear Redis caches for this ticker
+    await Promise.all([
+      this.cacheService.set(`news:${key}`,    [], 1),
+      this.cacheService.set(`social:${key}`,  [], 1),
+      this.cacheService.set(`filings:${key}`, [], 1),
+    ]);
+
+    const stock = await this.fetchAndPersist(key);
+    return { success: true, stock };
+  }
+
+  // ─── PRIVATE: Fetch everything and persist to DB ─────────────────────────────
+  private async fetchAndPersist(ticker: string) {
+    try {
+      this.logger.log(`[${ticker}] Running Research Engine...`);
+
+      const yf = await this.scraperService.fetchLivePrice(ticker);
+      if (!yf) throw new NotFoundException(`Ticker ${ticker} not found`);
+
+      // If Yahoo found a better symbol (e.g. INFY.NS for INFOSYS), use it for the rest
+      const resolvedTicker = yf.symbol || ticker;
+
+      const [hist, sc] = await Promise.all([
+        this.scraperService.fetchHistoricalData(resolvedTicker),
+        this.scraperService.scrapeScreener(resolvedTicker),
+      ]);
+
+      // Use the canonical, cleaned ticker for the DB (e.g. INFY instead of INFOSYS or INFY.NS)
+      const canonicalTicker = resolvedTicker.split('.')[0].toUpperCase();
+      const stock = await this.prisma.stock.upsert({
+        where: { ticker: canonicalTicker },
+        update: {
+          name: yf.name, price: yf.price, change: yf.change, changePercent: yf.changePercent,
+          marketCap: sc?.marketCap ?? 0, roe: sc?.roe ?? 0, debtToEquity: sc?.debtToEquity ?? 0,
           lastUpdated: new Date(),
+          stockPE: sc?.stockPE ?? 0, bookValue: sc?.bookValue ?? 0,
+          financials: (sc?.financials as any) ?? {},
         },
-      });
-
-      // Create a basic AI Insight so it's not empty
-      const changeP = stock.changePercent || 0;
-      await this.prisma.aIInsight.create({
-        data: {
-          stockId: stock.id,
-          summary: `Comprehensive analysis for ${stock.name}. Recent quarterly performance shows ${profitVal > 0 ? 'profitable' : 'challenging'} momentum. Intrinsic valuation calculated at ₹${(finalPrice * 1.15).toFixed(2)} based on cash flow projections.`,
-          analysisType: 'DEEP_RESEARCH',
-          sentimentScore: changeP + 55,
-          intrinsicValue: finalPrice * 1.15,
-          recommendation: changeP >= 0 ? 'BUY' : 'HOLD',
-          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24), // 24h
+        create: {
+          ticker: canonicalTicker, name: yf.name, price: yf.price, change: yf.change, changePercent: yf.changePercent,
+          marketCap: sc?.marketCap ?? 0, roe: sc?.roe ?? 0, debtToEquity: sc?.debtToEquity ?? 0,
+          lastUpdated: new Date(),
+          stockPE: sc?.stockPE ?? 0, bookValue: sc?.bookValue ?? 0,
+          financials: (sc?.financials as any) ?? {},
         }
       });
 
-      // Link to a random popular stock for supply chain demo
-      const otherStocks = await this.prisma.stock.findMany({ 
-        where: { NOT: { id: stock.id } },
-        take: 1 
-      });
+      // Save History (Bulk insertion for better production performance)
+      if (hist.length > 0) {
+        await this.prisma.priceHistory.deleteMany({ where: { stockId: stock.id } });
+        await this.prisma.priceHistory.createMany({
+          data: hist.map(h => ({ ...h, stockId: stock.id }))
+        });
+      }
 
-      if (otherStocks.length > 0) {
-        await this.prisma.stockDependency.create({
+      // AI Analysis - Wrapped in try/catch to ensure core data availability even if AI fails
+      let ai: any = null;
+      try {
+        const [news, social] = await Promise.all([
+          this.scraperService.scrapeNews(ticker),
+          this.scraperService.scrapeReddit(ticker),
+        ]);
+        const macro = await this.prisma.macroSignal.findMany();
+        ai = await this.aiService.deepStockAnalysis(stock, hist, news, macro);
+      } catch (err) {
+        this.logger.warn(`[${ticker}] AI Research synchronization delayed: ${err.message}`);
+      }
+
+      if (ai) {
+        await this.prisma.aIInsight.deleteMany({ where: { stockId: stock.id } });
+        await this.prisma.aIInsight.create({
           data: {
             stockId: stock.id,
-            dependsOnId: otherStocks[0].id,
-            impactFactor: 0.7
+            summary: ai.summary,
+            recommendation: ai.recommendation,
+            intrinsicValue: ai.intrinsicValue,
+            valuationScore: ai.valuationScore,
+            riskScore: ai.riskScore,
+            growthScore: ai.growthScore,
+            sentimentScore: ai.sentimentScore,
+            impactChain: ai.impactChain,
           }
         });
       }
 
-      return await this.prisma.stock.findUnique({
+      return this.prisma.stock.findUnique({
         where: { id: stock.id },
         include: {
-          sector: true,
+          sector:     true,
           aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
-          upstream: { include: { dependsOn: true } },
-          downstream: { include: { stock: true } },
+          priceHistory: { orderBy: { date: 'desc' }, take: 300 },
         },
       });
+
     } catch (e) {
-      this.logger.error(`Failed to fetch/save new stock ${ticker}: ${e.message}`);
+      this.logger.error(`[${ticker}] fetchAndPersist failed: ${e.message}`);
       throw e;
     }
   }
 
-  @Get('market-status')
-  @ApiOperation({ summary: 'Get high-level market pulse' })
-  async getMarketStatus() {
-    const macro = await this.prisma.macroSignal.findMany();
-    const trends = await this.prisma.googleTrend.findMany({ take: 10 });
-    const topGainers = await this.prisma.stock.findMany({
-      orderBy: { changePercent: 'desc' },
-      take: 5,
-    });
-    return { macro, trends, topGainers };
-  }
+  // ─── PRIVATE: Redis cache helper with auto-fetch on miss ────────────────────
+  private async getCached<T>(key: string, fetcher: () => Promise<T>, ttlSeconds: number): Promise<T> {
+    const cached = await this.cacheService.get<T>(key);
+    if (cached) return cached;
 
-  @Get('stocks')
-  @ApiOperation({ summary: 'Get all available stocks' })
-  async getAllStocks() {
-    return this.prisma.stock.findMany({
-      select: {
-        ticker: true,
-        name: true,
-        price: true,
-        changePercent: true,
-      }
-    });
-  }
-
-  @Get('intelligence/:ticker')
-  @ApiOperation({ summary: 'Get AI Intelligence for a specific stock' })
-  async getStockIntelligence(@Param('ticker') ticker: string) {
-    const stock = await this.prisma.stock.findUnique({
-      where: { ticker },
-      include: {
-        aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
-        upstream: { include: { dependsOn: true } },
-        downstream: { include: { stock: true } },
-      },
-    });
-    return stock;
+    const fresh = await fetcher().catch(() => [] as unknown as T);
+    await this.cacheService.set(key, fresh, ttlSeconds);
+    return fresh;
   }
 }

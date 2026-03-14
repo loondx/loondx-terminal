@@ -11,7 +11,7 @@ interface TopbarProps {
   showToast: (msg: string) => void;
 }
 
-export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMode, showToast }) => {
+export const Topbar: React.FC<TopbarProps> = ({ curStock, setCurStock, viewMode, setViewMode, showToast }) => {
   const [search, setSearch] = useState('');
   const [showSugg, setShowSugg] = useState(false);
   const [time, setTime] = useState('--:--:-- IST');
@@ -46,7 +46,9 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
 
   return (
     <div className="min-h-[48px] bg-[rgba(7,12,24,.98)] border-b border-brand-bd flex flex-wrap items-center px-[14px] py-[8px] lg:py-0 gap-[11px] shrink-0 backdrop-blur-[12px] z-[10000]">
-      <AppLogo hiddenOnMobile />
+      <div onClick={() => setCurStock('')} className="cursor-pointer hover:opacity-80 transition-opacity">
+        <AppLogo hiddenOnMobile />
+      </div>
       <div className="hidden sm:block w-[1px] h-[24px] bg-brand-bd shrink-0"></div>
 
       {/* SEARCH CONTAINER */}
@@ -66,12 +68,20 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
             setTimeout(() => setShowSugg(false), 250);
           }}
         />
-        {search && (
+        {search ? (
           <button 
-            className="absolute right-[8px] top-1/2 -translate-y-1/2 text-brand-t3 hover:text-brand-t1 text-[14px]"
-            onClick={() => setSearch('')}
+            className="absolute right-[8px] top-1/2 -translate-y-1/2 text-brand-bl hover:text-brand-t1 text-[14px] font-black"
+            onClick={() => {
+              setSearch('');
+              setShowSugg(false);
+            }}
           >×</button>
-        )}
+        ) : curStock ? (
+          <button 
+            className="absolute right-[8px] top-1/2 -translate-y-1/2 text-brand-t4 hover:text-brand-bl text-[10px] font-mono font-bold"
+            onClick={() => setCurStock('')}
+          >ESC</button>
+        ) : null}
 
         {showSugg && (
           <div className="absolute top-[calc(100%+6px)] left-0 right-0 bg-brand-bge border border-brand-bdh rounded-[4px] overflow-hidden z-[10001] shadow-[0_20px_50px_rgba(0,0,0,.6)]">
@@ -147,11 +157,24 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
 
       <div className="flex items-center gap-[10px] ml-auto shrink-0 flex-wrap justify-end">
         <div className="flex items-center gap-[5px] py-[4px] px-[9px] bg-brand-grg border border-[rgba(34,197,94,.2)] rounded-[4px]">
-          <div className="w-[6px] h-[6px] rounded-full bg-brand-gr shadow-[0_0_7px_var(--gr)] animate-flash"></div>
-          <span className="font-mono text-[9px] text-brand-gr tracking-[.08em]">NSE OPEN</span>
+          <div className="w-[6px] h-[6px] rounded-full bg-brand-gr shadow-[0_0_7px_var(--gr)] animate-pulse"></div>
+          <span className="font-mono text-[9px] text-brand-gr tracking-[.08em]">DATA: LIVE</span>
         </div>
-        <div className="font-mono text-[11px] text-brand-t2">{time}</div>
-        <div className="w-[30px] h-[30px] bg-brand-bgc border border-brand-bd rounded-[4px] flex items-center justify-center cursor-pointer text-brand-t2 text-[13px] hover:border-brand-bl hover:text-brand-bl transition-colors">🔔</div>
+        <div className="flex flex-col items-end">
+           <div className="font-mono text-[11px] text-brand-t1 font-bold leading-none">{time}</div>
+           <div className="font-mono text-[7px] text-brand-t4 uppercase tracking-tighter mt-1">{curStock ? `SYNCED: ${curStock}` : 'WAITING FOR INPUT'}</div>
+        </div>
+        <button 
+          className="w-[30px] h-[30px] bg-brand-bgc border border-brand-bd rounded-[4px] flex items-center justify-center cursor-pointer text-brand-t2 text-[13px] hover:border-brand-bl hover:text-brand-bl transition-colors"
+          onClick={() => {
+            if (curStock) {
+              showToast(`🔄 Force Refreshing ${curStock}...`);
+              stockService.refreshStock(curStock).then(() => window.location.reload());
+            }
+          }}
+        >
+          ↻
+        </button>
         <div className="w-[30px] h-[30px] bg-brand-bgc border border-brand-bd rounded-[4px] flex items-center justify-center cursor-pointer text-brand-t2 text-[13px] hover:border-brand-bl hover:text-brand-bl transition-colors">⚙</div>
       </div>
     </div>
