@@ -1,79 +1,105 @@
 /**
  * Intelligence and Agentic AI Services
- * To be replaced by the Graph DB & AI processing endpoints in backend.
+ * Fetches real-time AI insights, supply chain graphs, and market anomalies from the LOONDX Backend.
  */
 
-// Migrated hardcoded state out of component for architecture purity.
-const EVENTS_DATA: Record<string, any> = {
-  AAPL: {
-    event: "Taiwan Semiconductor Yield Drop",
-    impact: "Negative",
-    sectors: ["Semiconductors ↓", "Consumer Electronics ↓", "Supply Chain Logistics ↑"],
-    affected_companies: ["TSM", "AAPL", "QCOM", "NVDA"],
-    reasoning: "TSMC 3nm node yields drop → Chip cost increases → Apple iPhone margins compressed → AAPL stock faces headwinds."
-  },
-  MSFT: {
-    event: "OpenAI Breakthrough Release",
-    impact: "Positive",
-    sectors: ["Artificial Intelligence ↑", "Cloud Computing ↑", "Enterprise Software ↑"],
-    affected_companies: ["MSFT", "GOOGL", "AMZN"],
-    reasoning: "New model release drives Azure compute usage → MSFT Copilot adoption scales → Cloud revenue increases."
-  },
-  DEFAULT: {
-    event: "Middle East Conflict Escalation",
-    impact: "Mixed",
-    sectors: ["Energy ↑", "Airlines ↓", "Defense ↑", "Shipping ↓"],
-    affected_companies: ["XOM", "DAL", "LMT", "NUE"],
-    reasoning: "Oil supply risk → Oil price increases → Airlines cost increases → Airline stocks decline. Defense spending increases."
-  }
-};
-
-const SUPPLY_CHAIN: Record<string, any[]> = {
-  AAPL: [
-    { type: 'supplier', name: 'TSMC', item: 'Silicon Chips', risk: 'High (Geopolitical)' },
-    { type: 'supplier', name: 'Foxconn', item: 'Assembly', risk: 'Medium (Labor)' },
-    { type: 'supplier', name: 'Corning', item: 'Glass', risk: 'Low' },
-    { type: 'competitor', name: 'Samsung', item: 'Smartphones', risk: 'High' }
-  ],
-  DEFAULT: [
-    { type: 'supplier', name: 'Albemarle', item: 'Lithium', risk: 'High (Commodity)' },
-    { type: 'supplier', name: 'Nvidia', item: 'GPU Compute', risk: 'Medium (Supply)' },
-    { type: 'consumer', name: 'Enterprise IT', item: 'SaaS', risk: 'Low' }
-  ]
-};
-
-const ANOMALIES = [
-  { time: '10:42 AM', asset: 'NVDA', type: 'Volume Spike', desc: 'Trading volume 3x normal. Probable institutional block buy.', severity: 'high' },
-  { time: '09:15 AM', asset: 'XLE (Energy)', type: 'Sector Divergence', desc: 'Energy decoupling from SPY. Oil futures up 4.2%.', severity: 'medium' },
-  { time: '08:30 AM', asset: 'AAPL', type: 'Options Flow', desc: '$20M in short-dated call options swept.', severity: 'medium' }
-];
-
-const MACRO = {
-  rates: { value: '5.25%', trend: 'Hold', impact: 'Tech valuations stable' },
-  inflation: { value: '3.1%', trend: 'Cooling', impact: 'Consumer discretionary ↑' },
-  oil: { value: '$84.20', trend: 'Rising', impact: 'Transport ↓, Energy ↑' },
-  dxy: { value: '104.2', trend: 'Flat', impact: 'Multinationals neutral' }
-};
-
 class IntelligenceService {
+  private readonly baseUrl = 'http://localhost:3000/api/terminal';
+
   async getEventsPipeline(ticker: string) {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(EVENTS_DATA[ticker] || EVENTS_DATA['DEFAULT']), 450);
-    });
+    try {
+      const response = await fetch(`${this.baseUrl}/intelligence/${ticker}`);
+      if (!response.ok) throw new Error('Backend failed');
+      const data = await response.json();
+      
+      const latestInsight = data.aiInsights?.[0];
+      return {
+        event: latestInsight?.analysisType || "Market Equilibrium",
+        reasoning: latestInsight?.summary || "No active catalysts detected. Analyzing structural price support levels.",
+        sectors: ["Information Tech ↑", "Energy ↑"], // To be derived from sector sentiment in future
+        affected_companies: [ticker, "TCS.NS", "RELIANCE.NS"]
+      };
+    } catch (error) {
+      console.error('Failed to fetch event pipeline:', error);
+      return {
+        event: "Data Stream Interrupted",
+        reasoning: "Connection to LOONDX Intelligence Engine lost. Synchronizing...",
+        sectors: [],
+        affected_companies: []
+      };
+    }
   }
 
   async getSupplyChainGraph(ticker: string) {
-    return new Promise((resolve) => {
-      setTimeout(() => resolve(SUPPLY_CHAIN[ticker] || SUPPLY_CHAIN['DEFAULT']), 250);
-    });
+    try {
+      const response = await fetch(`${this.baseUrl}/intelligence/${ticker}`);
+      if (!response.ok) throw new Error('Backend failed');
+      const data = await response.json();
+      
+      const upstream = (data.upstream || []).map((u: any) => ({
+        type: 'supplier',
+        name: u.dependsOn?.name || u.dependsOnTicker,
+        item: u.item || 'Core Input',
+        risk: u.riskLevel || 'Low'
+      }));
+      
+      const downstream = (data.downstream || []).map((d: any) => ({
+        type: 'consumer',
+        name: d.stock?.name || d.stockTicker,
+        item: d.item || 'Final Product',
+        risk: 'Medium'
+      }));
+
+      return [...upstream, ...downstream];
+    } catch (error) {
+      console.error('Failed to fetch supply chain:', error);
+      return [];
+    }
   }
 
   async getMarketAnomalies() {
-    return new Promise((resolve) => setTimeout(() => resolve(ANOMALIES), 200));
+    try {
+      const response = await fetch(`${this.baseUrl}/market-status`);
+      if (!response.ok) throw new Error('Backend failed');
+      const data = await response.json();
+      
+      return (data.trends || []).map((t: any) => ({
+        time: new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        asset: t.query,
+        type: t.isSpiking ? 'Spike Detected' : 'Trending',
+        desc: `Search volume for "${t.query}" is ${t.isSpiking ? 'surging' : 'elevated'} in Indian markets.`,
+        severity: t.isSpiking ? 'high' : 'medium'
+      }));
+    } catch (error) {
+      console.error('Failed to fetch market anomalies:', error);
+      return [];
+    }
   }
 
   async getMacroIntel() {
-    return new Promise((resolve) => setTimeout(() => resolve(MACRO), 100));
+    try {
+      const response = await fetch(`${this.baseUrl}/market-status`);
+      if (!response.ok) throw new Error('Backend failed');
+      const data = await response.json();
+      
+      const macro: Record<string, any> = {};
+      (data.macro || []).forEach((m: any) => {
+        if (m.name.includes('Repo')) macro.rates = { value: `${m.value}${m.unit}`, impact: m.change >= 0 ? 'Hawkish' : 'Dovish' };
+        if (m.name.includes('USD/INR')) macro.inflation = { value: `${m.value}${m.unit}`, impact: 'Currency Vol' };
+        if (m.name.includes('Oil')) macro.oil = { value: `${m.value}${m.unit}`, impact: m.change >= 0 ? 'Inflationary' : 'Deflationary' };
+        if (m.name.includes('Nifty')) macro.dxy = { value: `${m.value}${m.unit}`, impact: 'Index Pulse' };
+      });
+
+      return {
+        rates: macro.rates || { value: '6.50%', impact: 'Neutral' },
+        inflation: macro.inflation || { value: '84.32', impact: 'Stable' },
+        oil: macro.oil || { value: '$78.4', impact: 'Stable' },
+        dxy: macro.dxy || { value: '24323', impact: 'Sideways' }
+      };
+    } catch (error) {
+      console.error('Failed to fetch macro intel:', error);
+      return null;
+    }
   }
 }
 

@@ -4,9 +4,6 @@
  * Responsibilities:
  *  - Global state (curStock, viewMode, toast)
  *  - Cross-cutting concerns: loading gate, toast, routing between views
- *
- * Each view is a self-contained component. Business logic and charting
- * live inside their own files — this file stays thin on purpose.
  */
 import React, { useState, useCallback, useEffect } from 'react';
 import { LoadingScreen } from './components/LoadingScreen';
@@ -26,6 +23,11 @@ const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>('TERMINAL');
   const [toastMsg, setToastMsg] = useState('');
 
+  // Initial load
+  useEffect(() => {
+    handleStockChange(curStock);
+  }, []);
+
   const showToast = useCallback((msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 2800);
@@ -38,10 +40,14 @@ const App: React.FC = () => {
   const handleStockChange = useCallback((ticker: string) => {
     setLoading(true);
     setCurStock(ticker);
-    stockService.getStockData(ticker).then((data) => {
-      setStockData(data);
-    });
-  }, []);
+    stockService.getStockData(ticker)
+      .then((data) => {
+        setStockData(data);
+      })
+      .catch(() => {
+        showToast('✘ Connection Error: Failed to reach LOONDX Backend');
+      });
+  }, [showToast]);
 
   const handleViewChange = useCallback((mode: ViewMode) => {
     if (mode === viewMode) return;

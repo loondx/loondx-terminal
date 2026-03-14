@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { STOCKS, NEWS2 } from '../data';
 import { genOHLC, genLbls, calcMA, calcEMA, calcBB, calcVWAP } from '../utils/charting';
 import { PanelHeader } from './PanelHeader';
 
@@ -22,11 +21,11 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1280);
 
   const isBackend = !!stockData?.stock;
-  const sd = isBackend ? stockData.stock : (stockData || STOCKS['RELIANCE.NS']);
+  const sd = isBackend ? stockData.stock : (stockData || { name: 'Loading...', price: 0, ticker: curStock });
   const macro = stockData?.macroSignals || [];
   const insights = sd.aiInsights?.[0] || null;
 
-  const [livePrice, setLivePrice] = useState<number>(sd.price || 1312.45);
+  const [livePrice, setLivePrice] = useState<number>(sd.price || 0);
 
   const pChartRef = useRef<HTMLCanvasElement>(null);
   const vChartRef = useRef<HTMLCanvasElement>(null);
@@ -38,7 +37,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   useEffect(() => {
     if (sd.price) setLivePrice(sd.price);
     const itv = setInterval(() => {
-      setLivePrice((prev: number) => Math.max(prev + (Math.random() - 0.499) * 0.11, 20));
+      setLivePrice((prev: number) => {
+        if (prev === 0) return sd.price || 0;
+        return Math.max(prev + (Math.random() - 0.499) * 0.11, 1);
+      });
     }, 4000);
     return () => clearInterval(itv);
   }, [sd.price]);
@@ -79,7 +81,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   }, [isResizingRight, isResizingBottom]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || !sd.price) return;
     if (pChartInst.current) pChartInst.current.destroy();
     if (vChartInst.current) vChartInst.current.destroy();
     if (wChartInst.current) wChartInst.current.destroy();
@@ -92,7 +94,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
       const tfN: any = { '1D': 25, '5D': 50, '1M': 60, '3M': 90, '6M': 126, '1Y': 250, '5Y': 260 };
       const n = tfN[tf] || 60;
-      const ohlcD = genOHLC(n, d.base || 180, d.volume || 50e6);
+      const ohlcD = genOHLC(n, d.price || 1300, d.volume || 50e6);
       const lbls = genLbls(n, tf);
       const closes = ohlcD.map(x => x.c);
       const ma20 = calcMA(closes, 20);
@@ -148,7 +150,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
         });
       }
       if (ctxW) {
-        const bV = sd?.price || 185;
+        const bV = sd?.price || 1300;
         const im = [bV*.92, bV, bV*.96, bV*1.08, bV*1.02, bV*1.16, bV*1.08, bV*1.22, bV*1.15, bV*1.28];
         wChartInst.current = new Chart(ctxW, {
           type: 'line',
@@ -160,9 +162,9 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
     return () => cancelAnimationFrame(t);
   }, [loading, curStock, stockData, tf, chartType, showIndicators, sd]);
 
-  const news = sd.news?.length ? sd.news.map((n: any) => ({ ...n, h: n.headline, src: n.source, time: '1h' })) : NEWS2;
+  const news = sd.news?.length ? sd.news.map((n: any) => ({ ...n, h: n.title, src: n.source, time: '1h' })) : [];
 
-  const riskScore = insights?.sentimentScore || 39;
+  const riskScore = insights?.sentimentScore || 50;
   const riskNeedle = -90 + (riskScore / 100) * 180;
 
   return (
@@ -191,14 +193,14 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
         <div className="flex flex-col flex-1 overflow-y-auto bg-brand-bg min-h-0 scrollbar-none">
           <div className="bg-brand-bgc border-b border-brand-bd flex items-center p-[8px_14px] gap-[20px] shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
             <div className="flex items-center gap-[12px]"><div className="font-mono text-[20px] font-bold text-brand-bl uppercase tracking-tight">{curStock}</div><div className="text-[11px] text-brand-t2 font-medium">{sd.name}</div></div>
-            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>₹{livePrice.toFixed(2)}</div></div>
+            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{livePrice.toFixed(2)}</div></div>
             <div className="ml-auto flex gap-4">
                {['1D','1M','1Y'].map(v => <button key={v} className={`font-mono text-[10px] px-2 py-1 rounded border ${tf===v?'text-brand-bl border-brand-bl':'text-brand-t4 border-transparent'}`} onClick={() => setTf(v)}>{v}</button>)}
                <div className="w-[1px] h-[20px] bg-brand-bd"></div>
                {['MA','BB','VWAP'].map(i => (
                  <button key={i} className={`font-mono text-[10px] px-2 py-1 rounded border ${(showIndicators as any)[i]?'text-brand-tl border-brand-tl bg-brand-tlg':'text-brand-t4 border-transparent'}`} onClick={() => setShowIndicators(prev => ({...prev, [i]: !(prev as any)[i]}))}>{i}</button>
                ))}
-               <div className="bg-brand-grg text-brand-gr font-mono text-[9px] font-bold px-[8px] py-[3px] rounded-[3px] border border-[rgba(34,197,94,.15)]">AI RATING: {insights?.recommendation || 'STRONG BUY'}</div>
+               <div className="bg-brand-grg text-brand-gr font-mono text-[9px] font-bold px-[8px] py-[3px] rounded-[3px] border border-[rgba(34,197,94,.15)]">AI RATING: {insights?.recommendation || 'BULLISH'}</div>
             </div>
           </div>
 
@@ -211,9 +213,9 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-brand-bd shrink-0 overflow-hidden" style={{ height: window.innerWidth > 1024 ? bottomHeight : 'auto' }}>
             <div className="bg-brand-bgp flex flex-col min-h-0 overflow-hidden">
-              <PanelHeader label="AI DEEP RESEARCH" dot="bl" right={<span className="text-[9px] text-brand-t4 font-mono">OPUS 4.6 ENGINE</span>} />
+              <PanelHeader label="AI DEEP RESEARCH" dot="bl" right={<span className="text-[9px] text-brand-t4 font-mono">LOONDX ENGINE</span>} />
               <div className="flex-1 p-[14px] overflow-y-auto scrollbar-none font-medium text-[11px] leading-[1.6] text-brand-t2">
-                 {insights?.summary || "AI Analysis Engine initializing... Aggregating news, socials, and financials for deep trajectory prediction."}
+                 {insights?.summary || "AI Analysis Engine initializing... Synchronizing deep market intelligence for Indian markets."}
                  {insights?.impactChain && (
                    <div className="mt-4 p-3 bg-brand-bgc border border-brand-bd rounded-[4px]">
                       <div className="text-[8px] text-brand-tl uppercase font-bold mb-2 tracking-widest">Global Impact Chain</div>
@@ -231,7 +233,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
                    <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Ref Price</div><div className="text-[18px] font-bold text-brand-t1">₹{livePrice.toFixed(2)}</div></div>
                 </div>
                 <div className="grid grid-cols-2 gap-y-3">
-                   {[{l:'ROE',v:sd.roe||'44.8%'},{l:'FCF',v:sd.fcf||'$102B'},{l:'Debt/Eq',v:sd.debtToEquity||'1.2'},{l:'P/E',v:sd.peRatio||'32.1'}].map(i=>(
+                   {[{l:'ROE',v:sd.roe ? `${sd.roe}%` : '22.4%'},{l:'Mkt Cap',v:sd.marketCap ? `${sd.marketCap} Cr` : '--'},{l:'Debt/Eq',v:sd.debtToEquity || '0.4'},{l:'EPS',v:sd.eps || '--'}].map(i=>(
                      <div key={i.l} className="flex flex-col"><span className="text-[8px] text-brand-t4 uppercase">{i.l}</span><span className="text-[11px] font-bold text-brand-t1 font-mono">{i.v}</span></div>
                    ))}
                 </div>
@@ -262,15 +264,16 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
                        <span className="text-[12px] font-bold text-brand-gr font-mono">{riskScore}%</span>
                    </div>
                 </div>
-                <div className="text-right font-mono"><div className="text-[8px] text-brand-t4 uppercase mb-1">Vol 24h</div><div className="text-[11px] font-bold text-brand-t1">128M</div></div>
+                <div className="text-right font-mono"><div className="text-[8px] text-brand-t4 uppercase mb-1">Vol 24h</div><div className="text-[11px] font-bold text-brand-t1">{(sd.volume / 10e6).toFixed(1)}M</div></div>
             </div>
             <div className="p-1 bg-brand-bgp">
                {news.map((n: any, i: number) => (
                  <div key={i} className="p-[12px] border-b border-brand-bd hover:bg-brand-bgc group transition-colors">
-                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-bl group-hover:underline">{n.src}</span><span className="text-brand-t4">{n.time}</span></div>
+                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-bl group-hover:underline">{n.src}</span><span className="text-brand-t4">1h</span></div>
                     <div className="text-[11.5px] leading-[1.4] text-brand-t1 font-medium">{n.h}</div>
                  </div>
                ))}
+               {!news.length && <div className="p-4 text-center text-brand-t4 text-[10px]">No recent news available.</div>}
             </div>
             <div className="sticky top-0 z-20 border-t border-brand-bd"><PanelHeader label="INSTITUTIONAL" dot="bl" /></div>
             <div className="p-4 grid grid-cols-2 gap-4 bg-brand-bgp border-b border-brand-bd">
