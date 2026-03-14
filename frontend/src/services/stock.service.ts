@@ -7,26 +7,30 @@ import { STOCKS } from '../data';
  * Switch between simulated and real API based on VITE_API_URL.
  */
 class StockService {
+  private readonly baseUrl = 'http://localhost:3000/api/terminal';
+
   async getStockData(ticker: string) {
-    // In production, we would call our backend:
-    // return fetchClient(`/stocks/${ticker}`);
-    
-    // For now, return from our data layer with a simulated delay
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(STOCKS[ticker] || STOCKS['AAPL']);
-      }, 300);
-    });
+    try {
+      const response = await fetch(`${this.baseUrl}/dashboard/${ticker}`);
+      if (!response.ok) throw new Error('Backend failed');
+      const data = await response.json();
+      
+      // Map backend structure to frontend expectation if needed
+      // Or update frontend to use the new rich data package
+      return data;
+    } catch (error) {
+      console.warn('Backend not available, falling back to mock data', error);
+      return STOCKS[ticker] || STOCKS['AAPL'];
+    }
   }
 
-  async getNews(_ticker: string) {
-    // Simulated news fetch
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Return simulated news (or calling /news endpoint)
-        resolve([]);
-      }, 500);
-    });
+  async getMarketStatus() {
+    try {
+      const response = await fetch(`${this.baseUrl}/market-status`);
+      return await response.json();
+    } catch (e) {
+      return { macro: [], topGainers: [] };
+    }
   }
 }
 
