@@ -6,10 +6,11 @@ import { PanelHeader } from './PanelHeader';
 
 interface TerminalBoardProps {
   curStock: string;
+  stockData: any;
   loading: boolean;
 }
 
-export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading }) => {
+export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockData, loading }) => {
   const [chartType, setChartType] = useState('candle');
   const [tf, setTf] = useState('1M');
   const [showMA, setShowMA] = useState(true);
@@ -29,9 +30,8 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
 
   // Live price tick
   useEffect(() => {
-    // Reset price to the base price of the current stock when stock changes
-    if (STOCKS[curStock]) {
-      setLivePrice(STOCKS[curStock].price);
+    if (stockData) {
+      setLivePrice(stockData.price);
     }
     const itv = setInterval(() => {
       setLivePrice(prev => Math.max(prev + (Math.random() - 0.499) * 0.11, 20));
@@ -161,7 +161,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
     });
 
     return () => cancelAnimationFrame(timer);
-  }, [loading, curStock, tf, chartType, showMA, showBB, showVWAP, showEMA]);
+  }, [loading, curStock, stockData, tf, chartType, showMA, showBB, showVWAP, showEMA]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -172,13 +172,13 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
     };
   }, []);
 
-  const sd = STOCKS[curStock] || STOCKS['AAPL'];
+  const sd = stockData || STOCKS['AAPL'];
 
   // --- Dynamic News Generation --- //
   const newsItems = NEWS2.map(item => {
     const sName = sd.name.split(' ')[0]; // E.g., 'Apple', 'NVIDIA', 'Tesla'
     const h = item.h
-      .replace(/Apple|iPhone|MacBook|App Store|Vision Pro/g, match => {
+      .replace(/Apple|iPhone|MacBook|App Store|Vision Pro/g, (match: string) => {
         if (match === 'iPhone') return curStock === 'TSLA' ? 'Model 3' : curStock === 'NVDA' ? 'H100' : 'Product';
         if (match === 'Vision Pro') return curStock === 'TSLA' ? 'CyberTruck' : curStock === 'NVDA' ? 'Omniverse' : 'Next-gen';
         if (match === 'App Store') return curStock === 'TSLA' ? 'Supercharger' : curStock === 'NVDA' ? 'AI Cloud' : 'Platform';
@@ -189,7 +189,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
   });
 
   // --- Derived financial metrics — all update when curStock changes --- //
-  const b = sd.base;
+  const b = sd.base || 180;
   const revenue   = +(b * 2.11).toFixed(1);
   const netIncome = +(b * 0.506).toFixed(1);
   const netMargin = +((netIncome / revenue) * 100).toFixed(2);

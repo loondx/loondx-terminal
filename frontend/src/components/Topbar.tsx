@@ -47,7 +47,17 @@ export const Topbar: React.FC<TopbarProps> = ({ curStock, setCurStock, viewMode,
         {showSugg && (
           <div className="absolute top-[calc(100%+4px)] left-0 right-0 bg-brand-bge border border-brand-bdh rounded-[4px] overflow-hidden z-[300] shadow-[0_16px_40px_rgba(0,0,0,.5)] block">
             {Object.entries(STOCKS).filter(([k, v]) => k.includes(search.toUpperCase()) || v.name.toUpperCase().includes(search.toUpperCase())).map(([k, v]) => (
-              <div key={k} className="p-[8px_12px] cursor-pointer flex items-center gap-[8px] border-b border-brand-bd transition-colors duration-100 hover:bg-brand-bgh last:border-none" onClick={() => { setCurStock(k); setSearch(''); setShowSugg(false); showToast(`✓ Loaded ${k} — ${v.name}`); }}>
+              <div key={k} className="p-[8px_12px] cursor-pointer flex items-center gap-[8px] border-b border-brand-bd transition-colors duration-100 hover:bg-brand-bgh last:border-none" 
+                onClick={() => { 
+                  // Close suggestions first
+                  setShowSugg(false);
+                  setSearch('');
+                  // Small delay to ensure event bubbling/processing before parent state change
+                  setTimeout(() => {
+                    setCurStock(k); 
+                    showToast(`✓ Loaded ${k} — ${v.name}`);
+                  }, 50);
+                }}>
                 <span className="font-mono font-semibold text-[12px] text-brand-bl min-w-[50px]">{k}</span>
                 <span className="text-brand-t2 text-[11px] flex-1">{v.name}</span>
                 <span className={`font-mono text-[11px] ${v.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>${v.price.toFixed(2)}</span>

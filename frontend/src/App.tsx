@@ -14,6 +14,8 @@ import { Topbar } from './components/Topbar';
 import { TerminalBoard } from './components/TerminalBoard';
 import { IntelligenceBoard } from './components/IntelligenceBoard';
 import { Toast } from './components/Toast';
+import { STOCKS } from './data';
+import { stockService } from './services/stock.service';
 import './index.css';
 
 type ViewMode = 'TERMINAL' | 'INTELLIGENCE';
@@ -21,6 +23,7 @@ type ViewMode = 'TERMINAL' | 'INTELLIGENCE';
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [curStock, setCurStock] = useState('AAPL');
+  const [stockData, setStockData] = useState<any>(STOCKS['AAPL']);
   const [viewMode, setViewMode] = useState<ViewMode>('TERMINAL');
   const [toastMsg, setToastMsg] = useState('');
 
@@ -34,14 +37,23 @@ const App: React.FC = () => {
   }, []);
 
   const handleStockChange = useCallback((ticker: string) => {
-    setLoading(true);   // trigger loader between stocks
+    setLoading(true);
     setCurStock(ticker);
+    stockService.getStockData(ticker).then((data) => {
+      setStockData(data);
+    });
   }, []);
+
+  const handleViewChange = useCallback((mode: ViewMode) => {
+    if (mode === viewMode) return;
+    setLoading(true);
+    setViewMode(mode);
+  }, [viewMode]);
 
   return (
     <>
       {loading && (
-        <LoadingScreen curStock={curStock} onComplete={handleLoadComplete} />
+        <LoadingScreen key={`${curStock}-${viewMode}`} curStock={curStock} onComplete={handleLoadComplete} />
       )}
 
       <div
@@ -52,13 +64,13 @@ const App: React.FC = () => {
           curStock={curStock}
           setCurStock={handleStockChange}
           viewMode={viewMode}
-          setViewMode={setViewMode}
+          setViewMode={handleViewChange}
           showToast={showToast}
         />
 
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
           {viewMode === 'TERMINAL' ? (
-            <TerminalBoard curStock={curStock} loading={loading} />
+            <TerminalBoard curStock={curStock} stockData={stockData} loading={loading} />
           ) : (
             <IntelligenceBoard curStock={curStock} />
           )}
