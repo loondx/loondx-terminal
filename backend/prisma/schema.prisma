@@ -1,0 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Stock {
+  id              String       @id @default(cuid())
+  ticker          String       @unique // e.g., RELIANCE.NS, TCS.NS
+  name            String
+  sectorId        String?
+  sector          Sector?      @relation(fields: [sectorId], references: [id])
+  lastUpdated     DateTime     @default(now())
+
+  // Market Data (Must Have 1)
+  price           Float?
+  change          Float?
+  changePercent   Float?
+  volume          Float?
+  marketCap       Float?
+  
+  // Financials (Must Have 2)
+  revenue         Float?
+  netIncome       Float?
+  eps             Float?
+  peRatio         Float?
+  pbRatio         Float?
+  roe             Float?
+  fcf             Float?
+  debtToEquity    Float?
+  
+  // Social Sentiment (Social 2)
+  tweets          Tweet[]
+  redditPosts     RedditPost[]
+  sentimentScore  Float?       // Aggregated AI score
+
+  // Institutional Activity (Must Have 4)
+  fiiHolding      Float?
+  diiHolding      Float?
+  promoterHolding Float?
+  
+  news            News[]
+  aiInsights      AIInsight[]
+  
+  // Dependencies (Supply Chain 7)
+  upstream        StockDependency[] @relation("UpstreamRelation")
+  downstream      StockDependency[] @relation("DownstreamRelation")
+}
+
+model Sector {
+  id            String   @id @default(cuid())
+  name          String   @unique // IT, Banking, Energy, etc.
+  sentiment     String?  // BULLISH, BEARISH
+  macroContext  String?  @db.Text
+  stocks        Stock[]
+}
+
+model News {
+  id          String   @id @default(cuid())
+  source      String
+  headline    String
+  sentiment   String?  // BULLISH, BEARISH, NEUTRAL
+  summary     String?  @db.Text
+  url         String?
+  publishedAt DateTime
+  stockId     String?
+  stock       Stock?   @relation(fields: [stockId], references: [id])
+}
+
+model MacroSignal {
+  id          String   @id @default(cuid())
+  name        String   // Oil Price, Interest Rate, Inflation, USD/INR
+  value       Float
+  unit        String?
+  change      Float?
+  impact      String?  @db.Text // AI analyzed impact
+  lastUpdated DateTime @default(now())
+}
+
+model Tweet {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+  sentiment   String?
+  author      String?
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model RedditPost {
+  id          String   @id @default(cuid())
+  title       String   @db.Text
+  content     String?  @db.Text
+  sentiment   String?
+  subreddit   String?
+  stockId     String
+  stock       Stock    @relation(fields: [stockId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model InstitutionalData {
+  id            String   @id @default(cuid())
+  ticker        String
+  fiiNetBuySell Float?
+  diiNetBuySell Float?
+  date          DateTime
+}
+
+model StockDependency {
+  id            String @id @default(cuid())
+  stockId       String
+  dependsOnId   String
+  stock         Stock  @relation("UpstreamRelation", fields: [stockId], references: [id])
+  dependsOn     Stock  @relation("DownstreamRelation", fields: [dependsOnId], references: [id])
+  impactFactor  Float? // How much dependence
+}
+
+model AIInsight {
+  id                String   @id @default(cuid())
+  stockId           String
+  stock             Stock    @relation(fields: [stockId], references: [id])
+  summary           String   @db.Text
+  analysisType      String   // SENTIMENT, FUNDAMENTAL, DEEP_RESEARCH, MACRO_IMPACT
+  sentimentScore    Float?   // 0 to 100
+  intrinsicValue    Float?
+  recommendation    String?  // BUY, HOLD, SELL
+  impactChain       String?  @db.Text // Global Event Impact mapping
+  precomputedAt     DateTime @default(now())
+  expiresAt         DateTime
+}
