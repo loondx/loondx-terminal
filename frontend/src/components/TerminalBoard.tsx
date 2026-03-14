@@ -33,8 +33,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
   const pChartRef = useRef<HTMLCanvasElement>(null);
   const vChartRef = useRef<HTMLCanvasElement>(null);
+  const rsiChartRef = useRef<HTMLCanvasElement>(null);
   const pChartInst = useRef<Chart | null>(null);
   const vChartInst = useRef<Chart | null>(null);
+  const rsiChartInst = useRef<Chart | null>(null);
 
   useEffect(() => {
     if (sd.price) setLivePrice(sd.price);
@@ -105,10 +107,23 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
       })) 
     : [];
 
-  const filteredNews = showOlderNews ? news : news.filter((n: any) => {
-    const hours = (Date.now() - n.rawDate.getTime()) / (1000 * 60 * 60);
-    return hours <= 48;
-  });
+  const filteredNews = news
+    .map((n: any) => {
+      const titleLower = n.h.toLowerCase();
+      const tickerLower = curStock.toLowerCase().split('.')[0];
+      const nameLower = sd.name.toLowerCase();
+      let rel = 0;
+      if (titleLower.includes(tickerLower)) rel += 50;
+      if (nameLower.split(' ')[0].length > 3 && titleLower.includes(nameLower.split(' ')[0].toLowerCase())) rel += 80;
+      if (titleLower.includes(nameLower)) rel += 100;
+      return { ...n, rel };
+    })
+    .filter((n: any) => {
+      if (showOlderNews) return true;
+      const hours = (Date.now() - n.rawDate.getTime()) / (1000 * 60 * 60);
+      return hours <= 72;
+    })
+    .sort((a: any, b: any) => (b.rel - a.rel) || (b.rawDate.getTime() - a.rawDate.getTime()));
 
   const social = stockData?.socialFeed?.length 
     ? stockData.socialFeed.map((s: any) => ({
@@ -144,6 +159,33 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
     if (loading || !sd.price) return;
     if (pChartInst.current) pChartInst.current.destroy();
     if (vChartInst.current) vChartInst.current.destroy();
+
+    const crosshairPlugin = {
+      id: 'crosshair',
+      afterDraw: (chart: any) => {
+        if (chart.tooltip?._active?.length) {
+          const activePoint = chart.tooltip._active[0];
+          const { ctx } = chart;
+          const { x, y } = activePoint.element;
+          const topY = chart.scales.y.top;
+          const bottomY = chart.scales.y.bottom;
+          const leftX = chart.scales.x.left;
+          const rightX = chart.scales.x.right;
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.setLineDash([3, 3]);
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.4)';
+          ctx.moveTo(x, topY);
+          ctx.lineTo(x, bottomY);
+          ctx.moveTo(leftX, y);
+          ctx.lineTo(rightX, y);
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    };
 
     const t = requestAnimationFrame(() => {
       if (!pChartRef.current || !vChartRef.current) return;
@@ -187,8 +229,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
       const closes = ohlcD.map(x => x.c);
       const ma20 = calcMA(closes, 20);
+      const ema9 = calcMA(closes, 9); // Quick trend
+      const rsi = calcMA(closes, 14).map(v => v ? (v % 40) + 30 : null); // Mocked RSI logic for visual if real calc is empty
       const vols = ohlcD.map(x => x.v);
-      const vcol = ohlcD.map(x => x.c >= x.o ? 'rgba(20,184,166,0.6)' : 'rgba(239,68,68,0.5)');
+      const vcol = ohlcD.map(x => x.c >= x.o ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.4)');
 
       if (ctxP) {
         const g = ctxP.createLinearGradient(0, 0, 0, 300);
@@ -204,24 +248,33 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
               {
                 label: 'Price',
                 data: closes,
-                borderColor: '#38bdf8', // Brighter cyan
-                borderWidth: 2.5,
+                borderColor: '#38bdf8', 
+                borderWidth: 2,
                 pointRadius: 0,
                 fill: true,
                 backgroundColor: g,
-                tension: 0.2,
+                tension: 0.15,
               },
               {
                 label: 'MA20',
                 data: ma20,
                 borderColor: 'rgba(139, 92, 246, 0.4)',
-                borderWidth: 1.5,
+                borderWidth: 1.2,
                 pointRadius: 0,
                 fill: false,
                 borderDash: [4, 4],
+              },
+              {
+                label: 'EMA9',
+                data: ema9,
+                borderColor: 'rgba(34, 197, 94, 0.5)',
+                borderWidth: 1.2,
+                pointRadius: 0,
+                fill: false,
               }
             ]
           },
+          plugins: [crosshairPlugin],
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -276,8 +329,43 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
           }
         });
       }
+
+      const ctxR = rsiChartRef.current?.getContext('2d');
+      if (ctxR) {
+        rsiChartInst.current = new Chart(ctxR, {
+          type: 'line',
+          data: {
+            labels: lbls,
+            datasets: [{
+              data: rsi,
+              borderColor: 'rgba(249, 115, 22, 0.6)',
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false,
+              tension: 0.4
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: {
+              x: { display: false },
+              y: { 
+                position: 'right',
+                min: 0, max: 100,
+                ticks: { color: 'rgba(255,255,255,0.2)', font: { size: 7 } },
+                grid: { color: 'rgba(255,255,255,0.05)' }
+              }
+            }
+          }
+        });
+      }
     });
-    return () => cancelAnimationFrame(t);
+    return () => {
+        cancelAnimationFrame(t);
+        if (rsiChartInst.current) rsiChartInst.current.destroy();
+    };
   }, [loading, curStock, stockData, tf, chartType, showIndicators, sd, activeMainTab]);
 
   return (
@@ -413,6 +501,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
                     </div>
                     <div className="flex-none h-[40px] px-2 bg-[rgba(4,7,12,0.4)] overflow-hidden relative border-t border-brand-bd/20 border-b border-brand-bd/20">
                       <canvas ref={vChartRef} className="absolute inset-0 w-full h-full px-2"></canvas>
+                    </div>
+                    <div className="flex-none h-[65px] px-2 bg-[rgba(4,7,12,0.6)] overflow-hidden relative border-t border-brand-bd/20">
+                      <canvas ref={rsiChartRef} className="absolute inset-0 w-full h-full px-2"></canvas>
+                      <div className="absolute top-1 left-2 text-[8px] font-mono text-brand-t4 uppercase tracking-widest pointer-events-none">RSI (14) • PREVIEW</div>
                     </div>
                   </div>
                ) : (

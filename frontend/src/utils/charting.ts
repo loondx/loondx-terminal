@@ -52,6 +52,29 @@ export const calcVWAP = (d: any[]) => {
   return d.map((x) => { const tp = (x.h + x.l + x.c) / 3; cTV += tp * x.v; cV += x.v; return cTV / cV; });
 };
 
+export const calcRSI = (c: number[], p: number = 14) => {
+  const r: (number | null)[] = new Array(c.length).fill(null);
+  if (c.length <= p) return r;
+  
+  let gains = 0, losses = 0;
+  for (let i = 1; i <= p; i++) {
+    const diff = c[i] - c[i-1];
+    if (diff > 0) gains += diff; else losses -= diff;
+  }
+  
+  let avgG = gains / p, avgL = losses / p;
+  r[p] = 100 - (100 / (1 + (avgG / (avgL || 1))));
+
+  for (let i = p + 1; i < c.length; i++) {
+    const diff = c[i] - c[i-1];
+    const g = diff > 0 ? diff : 0, l = diff < 0 ? -diff : 0;
+    avgG = (avgG * (p - 1) + g) / p;
+    avgL = (avgL * (p - 1) + l) / p;
+    r[i] = 100 - (100 / (1 + (avgG / (avgL || 1))));
+  }
+  return r;
+};
+
 export const csPlugin = {
   id: 'cs',
   beforeDatasetsDraw: (chart: any) => {

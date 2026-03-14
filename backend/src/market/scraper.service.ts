@@ -283,8 +283,8 @@ export class ScraperService {
    */
   async scrapeNews(ticker: string, companyName?: string, sector?: string, withinHours: number = 48) {
     const cleanTicker = ticker.split('.')[0];
-    const searchTerm = companyName ? `${companyName} stock` : `${cleanTicker} stock`;
-    const sectorQuery = sector ? ` OR "${sector} sector"` : '';
+    const searchTerm = companyName ? `"${companyName}" OR "${cleanTicker}"` : `"${cleanTicker}" stock`;
+    const sectorQuery = sector ? ` OR "${sector} segment"` : '';
     const query = encodeURIComponent(`${searchTerm}${sectorQuery}`);
 
     const sources = [
@@ -440,11 +440,12 @@ export class ScraperService {
    * Scrapes Reddit for recent sentiment (48h).
    * Expanded to multiple subreddits and includes sector context.
    */
-  async scrapeReddit(ticker: string, sector?: string, withinHours: number = 48) {
+   async scrapeReddit(ticker: string, companyName?: string, sector?: string, withinHours: number = 48) {
     try {
       const cleanTicker = ticker.split('.')[0];
+      const nameTerm = companyName ? ` OR "${companyName}"` : '';
       const sectorQuery = sector ? ` OR "${sector}"` : '';
-      const query = encodeURIComponent(`(${cleanTicker}${sectorQuery})`);
+      const query = encodeURIComponent(`("${cleanTicker}"${nameTerm}${sectorQuery})`);
       
       // Target high-signal retail investor hubs
       const subreddits = 'IndianStockMarket+IndiaInvestments+pennystocks+stocks+wallstreetbets';

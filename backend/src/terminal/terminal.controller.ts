@@ -82,7 +82,7 @@ export class TerminalController {
 
     const [liveNews, socialFeed, exchangeFilings, narrative] = await Promise.all([
       this.getCached(`news:${key}`,    () => this.scraperService.scrapeNews(key, companyName, sectorName), 600),
-      this.getCached(`social:${key}`,  () => this.scraperService.scrapeReddit(key, sectorName),            600),
+      this.getCached(`social:${key}`,  () => this.scraperService.scrapeReddit(key, companyName, sectorName), 600),
       this.getCached(`filings:${key}`, () => this.scraperService.scrapeExchangeFilings(key),  1800),
       this.getMarketNarrative(),
     ]);
@@ -222,8 +222,8 @@ export class TerminalController {
       let ai: any = null;
       try {
         const [news, social] = await Promise.all([
-          this.scraperService.scrapeNews(ticker),
-          this.scraperService.scrapeReddit(ticker),
+          this.scraperService.scrapeNews(ticker, stock.name),
+          this.scraperService.scrapeReddit(ticker, stock.name),
         ]);
         const macro = await this.prisma.macroSignal.findMany();
         ai = await this.aiService.deepStockAnalysis(stock, hist, news, macro);
