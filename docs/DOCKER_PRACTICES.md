@@ -29,14 +29,26 @@ graph TD
 - **Volume Mapping**: Database data is mapped to a named volume (`postgres_data`) so that database state persists even if the container is destroyed or updated.
 - **Internal Aliasing**: The frontend communicates with the backend via a service name alias (e.g., `http://api:3000`) within the Docker network, keeping traffic internal.
 
-## 3. Maintenance Commands
+## 3. Workflow Archetypes
+
+### 🛠 Development Workflow (Recommended)
+In development, you run the infrastructure (DB & Redis) in Docker, but run the apps manually for faster hot-reloading.
+
+1.  **Start Infra**: `docker-compose up -d`
+2.  **Run Backend**: `cd backend && npm run start:dev`
+3.  **Run Frontend**: `cd frontend && npm run dev`
+
+### 🚀 Production Deployment
+To run the *entire* stack in an isolated containerized environment:
+
+1.  **Start Stack**: `docker-compose -f docker-compose.prod.yml up --build -d`
+
+## 4. Maintenance Commands
 
 | Action | Command |
 | :--- | :--- |
-| **Start Stack** | `docker-compose up -d` |
-| **Full Cleanup** | `docker-compose down -v` (Careful: deletes DB data) |
-| **View API Logs** | `docker-compose logs -f api` |
-| **Prisma Update** | `docker-compose exec api npx prisma db push` |
-
-## 4. Scaling Strategy
+| **Start Dev Infra** | `docker-compose up -d` |
+| **Stop All** | `docker-compose down` |
+| **Full Cleanup** | `docker-compose down -v` |
+| **Restart API Prod** | `docker-compose -f docker-compose.prod.yml restart api` |
 For high traffic, the **api** service can be scaled horizontally using `docker-compose up --scale api=3`, with a load balancer like Nginx in front. Since the AI insights are precomputed in the database, adding more API instances immediately increases throughput.

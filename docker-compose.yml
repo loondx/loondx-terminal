@@ -1,44 +1,12 @@
+# Dev Infrastructure for LOONDX Terminal
+# Run with: docker-compose up -d
 version: '3.8'
 
 services:
-  # Node.js API server (NestJS)
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - '3000:3000'
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/loondx_db?schema=public
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-    depends_on:
-      - db
-      - redis
-    volumes:
-      - ./backend:/usr/src/app
-      - /usr/src/app/node_modules
-    command: npm run start:dev
-
-  # Next.js Frontend (or current Vite React frontend)
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - '5173:5173'
-    environment:
-      - NODE_ENV=development
-      - VITE_API_URL=http://localhost:3000/api/terminal
-    volumes:
-      - ./frontend:/usr/src/app
-      - /usr/src/app/node_modules
-    command: npm run dev
-
   # PostgreSQL database
   db:
     image: postgres:15-alpine
+    container_name: loondx-db
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -57,6 +25,7 @@ services:
   # Redis cache
   redis:
     image: redis:7-alpine
+    container_name: loondx-redis
     restart: always
     ports:
       - '6379:6379'
