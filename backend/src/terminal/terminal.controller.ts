@@ -1,6 +1,8 @@
 import { Controller, Get, Param, NotFoundException } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { PrismaService } from '../prisma.service';
 
+@ApiTags('terminal')
 @Controller('api/terminal')
 export class TerminalController {
   constructor(private readonly prisma: PrismaService) {}
