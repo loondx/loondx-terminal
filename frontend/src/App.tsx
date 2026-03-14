@@ -52,14 +52,14 @@ const App: React.FC = () => {
 
   return (
     <>
-      {loading && (
-        <LoadingScreen key={`${curStock}-${viewMode}`} curStock={curStock} onComplete={handleLoadComplete} />
-      )}
-
       <div
         id="app"
-        className={`h-screen flex flex-col transition-opacity duration-500 overflow-hidden ${loading ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+        className="h-screen flex flex-col overflow-hidden bg-brand-bg relative"
       >
+        {loading && (
+          <LoadingScreen key={`${curStock}-${viewMode}`} curStock={curStock} onComplete={handleLoadComplete} />
+        )}
+
         <Topbar
           curStock={curStock}
           setCurStock={handleStockChange}
