@@ -210,8 +210,8 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
   const ewSupport   = +(sd.price * 0.935).toFixed(0);
 
   return (
-    <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[1fr_298px] gap-[1px] bg-brand-bd overflow-y-auto lg:overflow-hidden min-h-0">
-      <div className="flex flex-col lg:grid lg:grid-rows-[auto_minmax(300px,1fr)_auto] gap-[1px] bg-brand-bd overflow-hidden shrink-0">
+    <div className="flex-1 flex flex-col lg:grid lg:grid-cols-[1fr_298px] gap-[1px] bg-brand-bd overflow-hidden min-h-0">
+      <div className="flex flex-col gap-[1px] bg-brand-bd overflow-y-auto min-h-0">
 
         {/* HERO */}
         <div className="bg-gradient-to-r from-brand-bgc to-brand-bgp overflow-x-auto flex flex-row items-center p-0 shrink-0 scrollbar-none">
@@ -245,7 +245,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
         </div>
 
         {/* CHART AREA */}
-        <div className="bg-brand-bgp flex flex-col overflow-hidden min-h-0">
+        <div className="bg-brand-bgp flex flex-col overflow-hidden" style={{ minHeight: 280, maxHeight: 420 }}>
           <div className="flex items-center gap-[3px] py-[5px] px-[11px] border-b border-brand-bd bg-brand-bgc shrink-0 flex-wrap">
             {['1D', '5D', '1M', '3M', '6M', '1Y', '5Y'].map(t => (
               <button key={t} className={`font-mono text-[11px] py-[3px] px-[8px] rounded-[3px] border cursor-pointer bg-none transition-all ${tf === t ? 'text-brand-bl border-brand-bld bg-brand-blg' : 'border-transparent text-brand-t3 hover:text-brand-t1 hover:bg-brand-bge'}`} onClick={() => setTf(t)}>{t}</button>
