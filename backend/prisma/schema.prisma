@@ -120,6 +120,14 @@ model StockDependency {
   impactFactor  Float? // How much dependence
 }
 
+model GoogleTrend {
+  id            String   @id @default(cuid())
+  term          String   @unique // e.g., "Adani stock", "banking crisis"
+  score         Int      // Interest 0-100
+  isSpiking     Boolean  @default(false)
+  lastUpdated   DateTime @default(now())
+}
+
 model AIInsight {
   id                String   @id @default(cuid())
   stockId           String

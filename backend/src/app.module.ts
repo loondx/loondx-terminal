@@ -5,7 +5,9 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaService } from './prisma.service';
 import { MarketService } from './market/market.service';
 import { MacroService } from './market/macro.service';
+import { ScraperService } from './market/scraper.service';
 import { AIService } from './ai/ai.service';
+import { IntelligenceService } from './ai/intelligence.service';
 import { JobsService } from './jobs/jobs.service';
 import { TerminalController } from './terminal/terminal.controller';
 
@@ -20,7 +22,9 @@ import { TerminalController } from './terminal/terminal.controller';
     PrismaService,
     MarketService,
     MacroService,
+    ScraperService,
     AIService,
+    IntelligenceService,
     JobsService,
   ],
 })
