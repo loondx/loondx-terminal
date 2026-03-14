@@ -47,6 +47,10 @@ model Stock {
   news            News[]
   aiInsights      AIInsight[]
   
+  // Detailed Financials (JSON)
+  financials      Json?        // Quarterly Results, P&L
+  newsData        Json?        // Structured news with links
+  
   // Dependencies (Supply Chain 7)
   upstream        StockDependency[] @relation("UpstreamRelation")
   downstream      StockDependency[] @relation("DownstreamRelation")

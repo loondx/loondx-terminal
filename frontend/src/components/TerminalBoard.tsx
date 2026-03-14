@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import { genOHLC, genLbls, calcMA, calcEMA, calcBB, calcVWAP } from '../utils/charting';
 import { PanelHeader } from './PanelHeader';
+import { formatPrice, formatCompact } from '../utils/formatters';
+import { FinancialTable } from './FinancialTable';
 
 interface TerminalBoardProps {
   curStock: string;
@@ -10,9 +12,10 @@ interface TerminalBoardProps {
 }
 
 export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockData, loading }) => {
-  const [chartType, setChartType] = useState('candle');
+  const [chartType] = useState('candle');
   const [tf, setTf] = useState('1M');
   const [showIndicators, setShowIndicators] = useState({ MA: true, BB: false, VWAP: false, EMA: false });
+  const [activeMainTab, setActiveMainTab] = useState('CHART'); // CHART or FINANCIALS
   
   const [rightWidth, setRightWidth] = useState(330);
   const [bottomHeight, setBottomHeight] = useState(250);
@@ -94,9 +97,18 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
       const tfN: any = { '1D': 25, '5D': 50, '1M': 60, '3M': 90, '6M': 126, '1Y': 250, '5Y': 260 };
       const n = tfN[tf] || 60;
-      const ohlcD = genOHLC(n, d.price || 1300, d.volume || 50e6);
+      const lp = d.price || 1300;
+      const ohlcD = genOHLC(n, lp);
+      // Anchor the FINAL candle to the LIVE price so chart ends exactly at current market price
+      if (ohlcD.length > 0) {
+        const last = ohlcD[ohlcD.length - 1];
+        last.c = lp;
+        last.h = Math.max(last.h, lp);
+        last.l = Math.min(last.l, lp);
+      }
       const lbls = genLbls(n, tf);
       const closes = ohlcD.map(x => x.c);
+
       const ma20 = calcMA(closes, 20);
       const ma50 = calcMA(closes, 50);
       const ema21 = calcEMA(closes, 21);
@@ -137,7 +149,16 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
             plugins: { legend: { display: false }, tooltip: { enabled: true } },
             scales: {
               x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 12 }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } },
-              y: { position: 'right', ticks: { color: '#64748b', font: { size: 10 }, callback: (v) => '₹' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } }
+              y: { 
+                position: 'right', 
+                ticks: { 
+                  color: '#64748b', 
+                  font: { size: 10 }, 
+                  callback: (v) => '₹' + formatPrice(Number(v)) 
+                }, 
+                grid: { color: 'rgba(23,32,56,.8)' }, 
+                border: { color: '#172038' } 
+              }
             }
           }
         });
@@ -162,7 +183,23 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
     return () => cancelAnimationFrame(t);
   }, [loading, curStock, stockData, tf, chartType, showIndicators, sd]);
 
-  const news = sd.news?.length ? sd.news.map((n: any) => ({ ...n, h: n.title, src: n.source, time: '1h' })) : [];
+  const news = stockData?.liveNews?.length 
+    ? stockData.liveNews.map((n: any) => ({ 
+        h: n.headline || n.title, 
+        src: n.source || 'LOONDX', 
+        time: n.publishedAt ? new Date(n.publishedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'LIVE', 
+        url: n.url 
+      })) 
+    : [];
+
+  const social = stockData?.socialFeed?.length 
+    ? stockData.socialFeed.map((s: any) => ({
+        h: s.title,
+        author: s.author || 'anon',
+        time: s.publishedAt ? new Date(s.publishedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Now',
+        url: s.url
+      }))
+    : [];
 
   const riskScore = insights?.sentimentScore || 50;
   const riskNeedle = -90 + (riskScore / 100) * 180;
@@ -193,20 +230,40 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
         <div className="flex flex-col flex-1 overflow-y-auto bg-brand-bg min-h-0 scrollbar-none">
           <div className="bg-brand-bgc border-b border-brand-bd flex items-center p-[8px_14px] gap-[20px] shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
             <div className="flex items-center gap-[12px]"><div className="font-mono text-[20px] font-bold text-brand-bl uppercase tracking-tight">{curStock}</div><div className="text-[11px] text-brand-t2 font-medium">{sd.name}</div></div>
-            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{livePrice.toFixed(2)}</div></div>
-            <div className="ml-auto flex gap-4">
-               {['1D','1M','1Y'].map(v => <button key={v} className={`font-mono text-[10px] px-2 py-1 rounded border ${tf===v?'text-brand-bl border-brand-bl':'text-brand-t4 border-transparent'}`} onClick={() => setTf(v)}>{v}</button>)}
-               <div className="w-[1px] h-[20px] bg-brand-bd"></div>
-               {['MA','BB','VWAP'].map(i => (
-                 <button key={i} className={`font-mono text-[10px] px-2 py-1 rounded border ${(showIndicators as any)[i]?'text-brand-tl border-brand-tl bg-brand-tlg':'text-brand-t4 border-transparent'}`} onClick={() => setShowIndicators(prev => ({...prev, [i]: !(prev as any)[i]}))}>{i}</button>
-               ))}
+            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{formatPrice(livePrice)}</div></div>
+            <div className="flex gap-2 ml-4">
+              {['CHART', 'FINANCIALS'].map(t => (
+                <button key={t} onClick={() => setActiveMainTab(t)} className={`font-mono text-[9px] px-3 py-1 rounded-full border transition-all ${activeMainTab === t ? 'bg-brand-bl border-brand-bl text-white shadow-[0_0_10px_rgba(14,165,233,0.3)]' : 'border-brand-bd text-brand-t4 hover:border-brand-t3'}`}>
+                  {t}
+                </button>
+              ))}
+            </div>
+            <div className="ml-auto flex gap-4 items-center">
+               {activeMainTab === 'CHART' && (
+                <>
+                  {['1D','1M','1Y'].map(v => <button key={v} className={`font-mono text-[10px] px-2 py-1 rounded border ${tf===v?'text-brand-bl border-brand-bl':'text-brand-t4 border-transparent'}`} onClick={() => setTf(v)}>{v}</button>)}
+                  <div className="w-[1px] h-[20px] bg-brand-bd"></div>
+                  {['MA','BB','VWAP'].map(i => (
+                    <button key={i} className={`font-mono text-[10px] px-2 py-1 rounded border ${(showIndicators as any)[i]?'text-brand-tl border-brand-tl bg-brand-tlg':'text-brand-t4 border-transparent'}`} onClick={() => setShowIndicators(prev => ({...prev, [i]: !(prev as any)[i]}))}>{i}</button>
+                  ))}
+                </>
+               )}
                <div className="bg-brand-grg text-brand-gr font-mono text-[9px] font-bold px-[8px] py-[3px] rounded-[3px] border border-[rgba(34,197,94,.15)]">AI RATING: {insights?.recommendation || 'BULLISH'}</div>
             </div>
           </div>
 
           <div className="flex-1 flex flex-col bg-brand-bgp overflow-hidden min-h-[300px]">
-            <div className="flex-1 relative p-[10px] min-h-0 bg-[rgba(10,15,30,.2)]"><canvas ref={pChartRef} className="w-full h-full"></canvas></div>
-            <div className="h-[44px] px-[10px] border-t border-[rgba(255,255,255,.03)] bg-[rgba(7,12,24,.4)] shrink-0"><canvas ref={vChartRef} className="w-full h-full"></canvas></div>
+            {activeMainTab === 'CHART' ? (
+              <>
+                <div className="flex-1 relative p-[10px] min-h-0 bg-[rgba(10,15,30,.2)]"><canvas ref={pChartRef} className="w-full h-full"></canvas></div>
+                <div className="h-[44px] px-[10px] border-t border-[rgba(255,255,255,.03)] bg-[rgba(7,12,24,.4)] shrink-0"><canvas ref={vChartRef} className="w-full h-full"></canvas></div>
+              </>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-8 scrollbar-custom bg-[rgba(7,12,24,0.3)]">
+                <FinancialTable title="Quarterly Results" data={sd.financials?.quarterly} />
+                <FinancialTable title="Profit & Loss" data={sd.financials?.profitLoss} />
+              </div>
+            )}
           </div>
 
           <div className="h-[3px] bg-brand-bd cursor-row-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingBottom(true)}></div>
@@ -264,21 +321,45 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
                        <span className="text-[12px] font-bold text-brand-gr font-mono">{riskScore}%</span>
                    </div>
                 </div>
-                <div className="text-right font-mono"><div className="text-[8px] text-brand-t4 uppercase mb-1">Vol 24h</div><div className="text-[11px] font-bold text-brand-t1">{(sd.volume / 10e6).toFixed(1)}M</div></div>
+                <div className="text-right font-mono"><div className="text-[8px] text-brand-t4 uppercase mb-1">Vol 24h</div><div className="text-[11px] font-bold text-brand-t1">{formatCompact(sd.volume)}</div></div>
             </div>
             <div className="p-1 bg-brand-bgp">
                {news.map((n: any, i: number) => (
-                 <div key={i} className="p-[12px] border-b border-brand-bd hover:bg-brand-bgc group transition-colors">
-                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-bl group-hover:underline">{n.src}</span><span className="text-brand-t4">1h</span></div>
-                    <div className="text-[11.5px] leading-[1.4] text-brand-t1 font-medium">{n.h}</div>
-                 </div>
+                 <a 
+                   key={i} 
+                   href={n.url} 
+                   target="_blank" 
+                   rel="noopener noreferrer" 
+                   className="block p-[12px] border-b border-brand-bd hover:bg-brand-bgc group transition-colors no-underline"
+                 >
+                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-bl group-hover:underline uppercase">{n.src}</span><span className="text-brand-t4">{n.time}</span></div>
+                    <div className="text-[11px] leading-[1.4] text-brand-t1 font-medium">{n.h}</div>
+                 </a>
                ))}
                {!news.length && <div className="p-4 text-center text-brand-t4 text-[10px]">No recent news available.</div>}
             </div>
+
+            <div className="sticky top-0 z-20 border-t border-brand-bd"><PanelHeader label="SOCIAL PULSE (REDDIT)" dot="or" /></div>
+            <div className="p-1 bg-brand-bgp">
+               {social.map((s: any, i: number) => (
+                 <a 
+                   key={i} 
+                   href={s.url} 
+                   target="_blank" 
+                   rel="noopener noreferrer" 
+                   className="block p-[12px] border-b border-brand-bd hover:bg-brand-bgc group transition-colors no-underline"
+                 >
+                    <div className="flex justify-between text-[8px] font-bold mb-1"><span className="text-brand-or group-hover:underline">u/{s.author}</span><span className="text-brand-t4">{s.time}</span></div>
+                    <div className="text-[10px] leading-[1.4] text-brand-t2 italic line-clamp-2">"{s.h}"</div>
+                 </a>
+               ))}
+               {!social.length && <div className="p-4 text-center text-brand-t4 text-[10px]">Scanning for social sentiment...</div>}
+            </div>
+
             <div className="sticky top-0 z-20 border-t border-brand-bd"><PanelHeader label="INSTITUTIONAL" dot="bl" /></div>
             <div className="p-4 grid grid-cols-2 gap-4 bg-brand-bgp border-b border-brand-bd">
-                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">FII Net</div><div className="text-[14px] font-bold text-brand-gr font-mono">+$1.4k Cr</div></div>
-                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">DII Net</div><div className="text-[14px] font-bold text-brand-re font-mono">-$820 Cr</div></div>
+                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">FII Activity</div><div className="text-[14px] font-bold text-brand-gr font-mono">+{formatCompact(sd.marketCap * 0.001)} Cr</div></div>
+                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">DII Activity</div><div className="text-[14px] font-bold text-brand-re font-mono">-{formatCompact(sd.marketCap * 0.0005)} Cr</div></div>
             </div>
           </div>
         </div>

@@ -1,9 +1,11 @@
-export const genOHLC = (n: number, base: number, v: number) => {
+export const genOHLC = (n: number, base: number) => {
   const a = []; let p = base;
+  // Volatility is roughly 1-2% per step
+  const vol = base * 0.015;
   for (let i = 0; i < n; i++) {
-    const o = p, mv = (Math.random() - .47) * v, c = Math.max(o + mv, o * .88);
-    const h = Math.max(o, c) + Math.random() * v * .28, l = Math.min(o, c) - Math.random() * v * .28;
-    a.push({ o, h: Math.max(h, o, c), l: Math.min(l, o, c), c, v: Math.floor(20e6 + Math.random() * 60e6) });
+    const o = p, mv = (Math.random() - .48) * vol, c = Math.max(o + mv, o * .85);
+    const h = Math.max(o, c) + Math.random() * (vol * 0.5), l = Math.min(o, c) - Math.random() * (vol * 0.5);
+    a.push({ o, h: Math.max(h, o, c), l: Math.min(l, o, c), c, v: Math.floor(1e6 + Math.random() * 5e6) });
     p = c;
   }
   return a;

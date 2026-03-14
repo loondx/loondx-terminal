@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppLogo } from './AppLogo';
 import { stockService } from '../services/stock.service';
+import { formatPrice, formatPercent } from '../utils/formatters';
 
 interface TopbarProps {
   curStock: string;
@@ -36,11 +37,12 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
     stockService.getMarketStatus().then(setMarketStatus);
   }, []);
 
-  // Filter logic
-  const filtered = allStocks.filter((s) => {
-    if (!search) return false;
-    return s.ticker.includes(search.toUpperCase()) || s.name.toUpperCase().includes(search.toUpperCase());
-  });
+  // Filter logic: show all DB stocks on focus, filter by query when typing
+  const filtered = search.length >= 1
+    ? allStocks.filter((s) =>
+        s.ticker.includes(search.toUpperCase()) || s.name.toUpperCase().includes(search.toUpperCase())
+      ).slice(0, 8)
+    : allStocks.slice(0, 8); // show up to 8 recent stocks on focus
 
   return (
     <div className="min-h-[48px] bg-[rgba(7,12,24,.98)] border-b border-brand-bd flex flex-wrap items-center px-[14px] py-[8px] lg:py-0 gap-[11px] shrink-0 backdrop-blur-[12px] z-[10000]">
@@ -71,9 +73,12 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
           >×</button>
         )}
 
-        {showSugg && filtered.length > 0 && (
+        {showSugg && (
           <div className="absolute top-[calc(100%+6px)] left-0 right-0 bg-brand-bge border border-brand-bdh rounded-[4px] overflow-hidden z-[10001] shadow-[0_20px_50px_rgba(0,0,0,.6)]">
-            <div className="p-[6px_10px] bg-brand-bgc border-b border-brand-bd text-[9px] text-brand-t4 font-bold tracking-widest uppercase">Select Instrument</div>
+          <div className="p-[6px_10px] bg-brand-bgc border-b border-brand-bd text-[9px] text-brand-t4 font-bold tracking-widest uppercase flex justify-between">
+              <span>{search ? 'Search Results' : 'Recent Instruments'}</span>
+              <span>{filtered.length} found</span>
+            </div>
             {filtered.map((s) => (
               <div 
                 key={s.ticker} 
@@ -91,11 +96,29 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
                   <div className="text-brand-t3 text-[10px] truncate">{s.name}</div>
                 </div>
                 <div className="text-right">
-                  <div className={`font-mono text-[11px] font-bold ${s.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{s.price.toFixed(2)}</div>
-                  <div className={`font-mono text-[9px] ${s.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>{s.changePercent > 0 ? '+' : ''}{s.changePercent.toFixed(2)}%</div>
+                  <div className={`font-mono text-[11px] font-bold ${s.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{formatPrice(s.price)}</div>
+                  <div className={`font-mono text-[9px] ${s.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>{formatPercent(s.changePercent)}</div>
                 </div>
               </div>
             ))}
+            {search && search.length >= 2 && !filtered.find(s => s.ticker === search.toUpperCase()) && (
+              <div 
+                className="p-[12px] cursor-pointer flex items-center gap-[10px] bg-[rgba(14,165,233,0.05)] hover:bg-[rgba(14,165,233,0.1)] transition-colors"
+                onClick={() => {
+                  const ticker = search.includes('.') ? search.toUpperCase() : `${search.toUpperCase()}.NS`;
+                  setCurStock(ticker);
+                  setSearch('');
+                  setShowSugg(false);
+                  showToast(`🔍 Searching LOONDX Engine for ${ticker}...`);
+                }}
+              >
+                <div className="w-[36px] h-[36px] rounded-[4px] bg-brand-bl flex items-center justify-center text-[white] text-[16px]">📡</div>
+                <div className="flex-1">
+                  <div className="font-mono font-bold text-[12px] text-brand-bl">Search External: {search.toUpperCase()}</div>
+                  <div className="text-brand-t3 text-[10px]">Fetch real-time data from Indian API</div>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

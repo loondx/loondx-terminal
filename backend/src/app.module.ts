@@ -10,6 +10,7 @@ import { AIService } from './ai/ai.service';
 import { IntelligenceService } from './ai/intelligence.service';
 import { JobsService } from './jobs/jobs.service';
 import { SeedService } from './seed.service';
+import { CacheService } from './cache.service';
 import { TerminalController } from './terminal/terminal.controller';
 
 @Module({
@@ -21,6 +22,7 @@ import { TerminalController } from './terminal/terminal.controller';
   controllers: [TerminalController],
   providers: [
     PrismaService,
+    CacheService,
     MarketService,
     MacroService,
     ScraperService,
