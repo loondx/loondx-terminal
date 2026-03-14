@@ -278,7 +278,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
       }
     });
     return () => cancelAnimationFrame(t);
-  }, [loading, curStock, stockData, tf, chartType, showIndicators, sd]);
+  }, [loading, curStock, stockData, tf, chartType, showIndicators, sd, activeMainTab]);
 
   return (
     <div className="flex-1 flex flex-col min-w-0 bg-brand-bg relative overflow-hidden">
@@ -407,8 +407,8 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                {activeMainTab === 'CHART' ? (
-                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                    <div className="flex-1 relative bg-[rgba(10,15,30,0.15)] min-h-[100px] max-h-[35%] border-b border-[rgba(255,255,255,0.02)] overflow-hidden">
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                    <div className={`flex-1 relative bg-[rgba(10,15,30,0.15)] min-h-[100px] border-b border-[rgba(255,255,255,0.02)] overflow-hidden transition-all duration-300 ${showBottom ? 'max-h-[35%]' : 'max-h-none'}`}>
                       <canvas ref={pChartRef} className="absolute inset-0 w-full h-full"></canvas>
                     </div>
                     <div className="flex-none h-[40px] px-2 bg-[rgba(4,7,12,0.4)] overflow-hidden relative border-t border-brand-bd/20 border-b border-brand-bd/20">
