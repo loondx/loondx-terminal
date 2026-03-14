@@ -56,7 +56,11 @@
    ```
 
 ## 📚 Documentation
-- **Architecture**: Detailed system design in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+- **Architecture**: Core design principles in [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+- **High-Level Design (HLD)**: System diagrams and components in [docs/HLD.md](./docs/HLD.md).
+- **Low-Level Design (LLD)**: Sequence diagrams and class hierarchy in [docs/LLD.md](./docs/LLD.md).
+- **User Flow**: Journey maps and interaction archetypes in [docs/USER_FLOW.md](./docs/USER_FLOW.md).
+- **Docker Best Practices**: Deployment and containerization guide in [docs/DOCKER_PRACTICES.md](./docs/DOCKER_PRACTICES.md).
 - **API Reference**: Swagger UI is available at `http://localhost:3000/docs` when the backend is running.
 
 ## 🛡 License
