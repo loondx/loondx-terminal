@@ -42,14 +42,21 @@ export class JobsService {
     for (const ticker of this.priorityTickers) {
       try {
         const details = await this.marketService.getStockDetails(ticker);
-        await this.prisma.stock.update({
+        await this.prisma.stock.upsert({
           where: { ticker },
-          data: {
+          update: {
             price: details.price,
             changePercent: details.change_percent,
             volume: details.volume,
             lastUpdated: new Date(),
           },
+          create: {
+            ticker,
+            name: ticker.split('.')[0],
+            price: details.price,
+            changePercent: details.change_percent,
+            volume: details.volume,
+          }
         });
       } catch (e) {
         this.logger.warn(`Could not refresh ${ticker}: ${e.message}`);

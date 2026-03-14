@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { STOCKS, TICKS } from '../data';
 import { AppLogo } from './AppLogo';
+import { stockService } from '../services/stock.service';
 
 interface TopbarProps {
   curStock: string;
@@ -13,7 +13,9 @@ interface TopbarProps {
 export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMode, showToast }) => {
   const [search, setSearch] = useState('');
   const [showSugg, setShowSugg] = useState(false);
-  const [time, setTime] = useState('--:--:-- EST');
+  const [time, setTime] = useState('--:--:-- IST');
+  const [allStocks, setAllStocks] = useState<any[]>([]);
+  const [marketStatus, setMarketStatus] = useState<any>({ macro: [], topGainers: [] });
 
   // Clock
   useEffect(() => {
@@ -28,10 +30,16 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch stocks for search and market status for marquee
+  useEffect(() => {
+    stockService.getAllStocks().then(setAllStocks);
+    stockService.getMarketStatus().then(setMarketStatus);
+  }, []);
+
   // Filter logic
-  const filtered = Object.entries(STOCKS).filter(([k, v]) => {
+  const filtered = allStocks.filter((s) => {
     if (!search) return false;
-    return k.includes(search.toUpperCase()) || v.name.toUpperCase().includes(search.toUpperCase());
+    return s.ticker.includes(search.toUpperCase()) || s.name.toUpperCase().includes(search.toUpperCase());
   });
 
   return (
@@ -45,7 +53,7 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
         <input
           type="text"
           className="w-full bg-brand-bgc border border-brand-bd rounded-[4px] py-[6px] pr-[30px] pl-[30px] font-mono text-[12px] text-brand-t1 outline-none transition-all duration-200 tracking-[.04em] focus:border-brand-bl placeholder:text-brand-t3"
-          placeholder="Search ticker (e.g. NVDA, TSLA)..."
+          placeholder="Search ticker (e.g. RELIANCE, TCS)..."
           value={search}
           onChange={(e) => { 
             setSearch(e.target.value); 
@@ -66,25 +74,25 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
         {showSugg && filtered.length > 0 && (
           <div className="absolute top-[calc(100%+6px)] left-0 right-0 bg-brand-bge border border-brand-bdh rounded-[4px] overflow-hidden z-[10001] shadow-[0_20px_50px_rgba(0,0,0,.6)]">
             <div className="p-[6px_10px] bg-brand-bgc border-b border-brand-bd text-[9px] text-brand-t4 font-bold tracking-widest uppercase">Select Instrument</div>
-            {filtered.map(([k, v]) => (
+            {filtered.map((s) => (
               <div 
-                key={k} 
+                key={s.ticker} 
                 className="p-[10px_12px] cursor-pointer flex items-center gap-[10px] border-b border-brand-bd last:border-none transition-colors duration-100 hover:bg-brand-bgh active:bg-brand-blg"
                 onClick={() => {
-                  setCurStock(k);
+                  setCurStock(s.ticker);
                   setSearch('');
                   setShowSugg(false);
-                  showToast(`✓ Instrument Switched: ${k}`);
+                  showToast(`✓ Instrument Switched: ${s.ticker}`);
                 }}
               >
-                <div className="w-[36px] h-[36px] rounded-[4px] bg-brand-bgc flex items-center justify-center font-bold text-brand-bl text-[11px] border border-brand-bd">{k[0]}</div>
+                <div className="w-[36px] h-[36px] rounded-[4px] bg-brand-bgc flex items-center justify-center font-bold text-brand-bl text-[11px] border border-brand-bd">{s.ticker[0]}</div>
                 <div className="flex-1 overflow-hidden">
-                  <div className="font-mono font-bold text-[12px] text-brand-t1">{k}</div>
-                  <div className="text-brand-t3 text-[10px] truncate">{v.name}</div>
+                  <div className="font-mono font-bold text-[12px] text-brand-t1">{s.ticker}</div>
+                  <div className="text-brand-t3 text-[10px] truncate">{s.name}</div>
                 </div>
                 <div className="text-right">
-                  <div className={`font-mono text-[11px] font-bold ${v.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>${v.price.toFixed(2)}</div>
-                  <div className={`font-mono text-[9px] ${v.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>{v.pct > 0 ? '+' : ''}{v.pct.toFixed(2)}%</div>
+                  <div className={`font-mono text-[11px] font-bold ${s.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>₹{s.price.toFixed(2)}</div>
+                  <div className={`font-mono text-[9px] ${s.changePercent >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>{s.changePercent > 0 ? '+' : ''}{s.changePercent.toFixed(2)}%</div>
                 </div>
               </div>
             ))}
@@ -105,11 +113,11 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
       <div className="hidden lg:block w-[1px] h-[24px] bg-brand-bd shrink-0"></div>
 
       <div className="hidden lg:flex gap-0 flex-1 overflow-x-auto scrollbar-none items-center">
-        {TICKS.map(t => (
-          <div key={t.s} className="flex items-center gap-[5px] py-[4px] px-[9px] border-r border-brand-bd cursor-pointer transition-colors hover:bg-brand-bgc whitespace-nowrap group">
-            <span className="font-mono text-[10px] font-semibold text-brand-t3 group-hover:text-brand-bl">{t.s}</span>
-            <span className="font-mono text-[10px] text-brand-t1">{t.p.toFixed(2)}</span>
-            <span className={`font-mono text-[9px] ${t.c > 0 ? 'text-brand-gr' : 'text-brand-re'}`}>{t.c > 0 ? '+' : ''}{t.c.toFixed(2)}%</span>
+        {marketStatus.macro.map((m: any) => (
+          <div key={m.id} className="flex items-center gap-[5px] py-[4px] px-[9px] border-r border-brand-bd cursor-pointer transition-colors hover:bg-brand-bgc whitespace-nowrap group">
+            <span className="font-mono text-[10px] font-semibold text-brand-t3 group-hover:text-brand-bl">{m.name}</span>
+            <span className="font-mono text-[10px] text-brand-t1">{m.value}{m.unit}</span>
+            <span className={`font-mono text-[9px] ${m.change >= 0 ? 'text-brand-gr' : 'text-brand-re'}`}>{m.change >= 0 ? '+' : ''}{m.change.toFixed(2)}%</span>
           </div>
         ))}
       </div>
@@ -117,7 +125,7 @@ export const Topbar: React.FC<TopbarProps> = ({ setCurStock, viewMode, setViewMo
       <div className="flex items-center gap-[10px] ml-auto shrink-0 flex-wrap justify-end">
         <div className="flex items-center gap-[5px] py-[4px] px-[9px] bg-brand-grg border border-[rgba(34,197,94,.2)] rounded-[4px]">
           <div className="w-[6px] h-[6px] rounded-full bg-brand-gr shadow-[0_0_7px_var(--gr)] animate-flash"></div>
-          <span className="font-mono text-[9px] text-brand-gr tracking-[.08em]">NYSE OPEN</span>
+          <span className="font-mono text-[9px] text-brand-gr tracking-[.08em]">NSE OPEN</span>
         </div>
         <div className="font-mono text-[11px] text-brand-t2">{time}</div>
         <div className="w-[30px] h-[30px] bg-brand-bgc border border-brand-bd rounded-[4px] flex items-center justify-center cursor-pointer text-brand-t2 text-[13px] hover:border-brand-bl hover:text-brand-bl transition-colors">🔔</div>

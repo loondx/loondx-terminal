@@ -9,6 +9,7 @@ import { ScraperService } from './market/scraper.service';
 import { AIService } from './ai/ai.service';
 import { IntelligenceService } from './ai/intelligence.service';
 import { JobsService } from './jobs/jobs.service';
+import { SeedService } from './seed.service';
 import { TerminalController } from './terminal/terminal.controller';
 
 @Module({
@@ -26,6 +27,7 @@ import { TerminalController } from './terminal/terminal.controller';
     AIService,
     IntelligenceService,
     JobsService,
+    SeedService,
   ],
 })
 export class AppModule {}

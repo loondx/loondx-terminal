@@ -8,13 +8,12 @@
  * Each view is a self-contained component. Business logic and charting
  * live inside their own files — this file stays thin on purpose.
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { LoadingScreen } from './components/LoadingScreen';
 import { Topbar } from './components/Topbar';
 import { TerminalBoard } from './components/TerminalBoard';
 import { IntelligenceBoard } from './components/IntelligenceBoard';
 import { Toast } from './components/Toast';
-import { STOCKS } from './data';
 import { stockService } from './services/stock.service';
 import './index.css';
 
@@ -22,8 +21,8 @@ type ViewMode = 'TERMINAL' | 'INTELLIGENCE';
 
 const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [curStock, setCurStock] = useState('AAPL');
-  const [stockData, setStockData] = useState<any>(STOCKS['AAPL']);
+  const [curStock, setCurStock] = useState('RELIANCE.NS');
+  const [stockData, setStockData] = useState<any>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('TERMINAL');
   const [toastMsg, setToastMsg] = useState('');
 

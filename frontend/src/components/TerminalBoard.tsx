@@ -22,11 +22,11 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1280);
 
   const isBackend = !!stockData?.stock;
-  const sd = isBackend ? stockData.stock : (stockData || STOCKS['AAPL']);
+  const sd = isBackend ? stockData.stock : (stockData || STOCKS['RELIANCE.NS']);
   const macro = stockData?.macroSignals || [];
   const insights = sd.aiInsights?.[0] || null;
 
-  const [livePrice, setLivePrice] = useState<number>(sd.price || 212.49);
+  const [livePrice, setLivePrice] = useState<number>(sd.price || 1312.45);
 
   const pChartRef = useRef<HTMLCanvasElement>(null);
   const vChartRef = useRef<HTMLCanvasElement>(null);
@@ -135,7 +135,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
             plugins: { legend: { display: false }, tooltip: { enabled: true } },
             scales: {
               x: { ticks: { color: '#334155', font: { size: 9 }, maxTicksLimit: 12 }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } },
-              y: { position: 'right', ticks: { color: '#64748b', font: { size: 10 }, callback: (v) => '$' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } }
+              y: { position: 'right', ticks: { color: '#64748b', font: { size: 10 }, callback: (v) => '₹' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } }
             }
           }
         });
@@ -191,7 +191,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
         <div className="flex flex-col flex-1 overflow-y-auto bg-brand-bg min-h-0 scrollbar-none">
           <div className="bg-brand-bgc border-b border-brand-bd flex items-center p-[8px_14px] gap-[20px] shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
             <div className="flex items-center gap-[12px]"><div className="font-mono text-[20px] font-bold text-brand-bl uppercase tracking-tight">{curStock}</div><div className="text-[11px] text-brand-t2 font-medium">{sd.name}</div></div>
-            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>${livePrice.toFixed(2)}</div></div>
+            <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>₹{livePrice.toFixed(2)}</div></div>
             <div className="ml-auto flex gap-4">
                {['1D','1M','1Y'].map(v => <button key={v} className={`font-mono text-[10px] px-2 py-1 rounded border ${tf===v?'text-brand-bl border-brand-bl':'text-brand-t4 border-transparent'}`} onClick={() => setTf(v)}>{v}</button>)}
                <div className="w-[1px] h-[20px] bg-brand-bd"></div>
@@ -227,8 +227,8 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
               <PanelHeader label="VALUATION / DCF" dot="ye" />
               <div className="flex-1 p-[14px] flex flex-col gap-4">
                 <div className="flex justify-between border-b border-brand-bd pb-2 font-mono">
-                   <div><div className="text-[8px] text-brand-t4 uppercase">Intrinsic Val</div><div className="text-[18px] font-bold text-brand-tl">${sd.intrinsicValue || (livePrice * 1.05).toFixed(1)}</div></div>
-                   <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Ref Price</div><div className="text-[18px] font-bold text-brand-t1">${livePrice.toFixed(2)}</div></div>
+                   <div><div className="text-[8px] text-brand-t4 uppercase">Intrinsic Val</div><div className="text-[18px] font-bold text-brand-tl">₹{sd.intrinsicValue || (livePrice * 1.05).toFixed(1)}</div></div>
+                   <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Ref Price</div><div className="text-[18px] font-bold text-brand-t1">₹{livePrice.toFixed(2)}</div></div>
                 </div>
                 <div className="grid grid-cols-2 gap-y-3">
                    {[{l:'ROE',v:sd.roe||'44.8%'},{l:'FCF',v:sd.fcf||'$102B'},{l:'Debt/Eq',v:sd.debtToEquity||'1.2'},{l:'P/E',v:sd.peRatio||'32.1'}].map(i=>(

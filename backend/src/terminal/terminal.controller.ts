@@ -58,4 +58,31 @@ export class TerminalController {
     });
     return { macro, trends, topGainers };
   }
+
+  @Get('stocks')
+  @ApiOperation({ summary: 'Get all available stocks' })
+  async getAllStocks() {
+    return this.prisma.stock.findMany({
+      select: {
+        ticker: true,
+        name: true,
+        price: true,
+        changePercent: true,
+      }
+    });
+  }
+
+  @Get('intelligence/:ticker')
+  @ApiOperation({ summary: 'Get AI Intelligence for a specific stock' })
+  async getStockIntelligence(@Param('ticker') ticker: string) {
+    const stock = await this.prisma.stock.findUnique({
+      where: { ticker },
+      include: {
+        aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
+        upstream: { include: { dependsOn: true } },
+        downstream: { include: { stock: true } },
+      },
+    });
+    return stock;
+  }
 }
