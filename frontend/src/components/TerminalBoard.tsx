@@ -22,7 +22,9 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   const [bottomHeight, setBottomHeight] = useState(250);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(window.innerWidth > 1400);
+  
+  // Default to showing sidebar only on large screens (>1280px)
+  const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1280);
 
   const [livePrice, setLivePrice] = useState<number>(stockData?.price || 212.49);
 
@@ -43,11 +45,11 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 1024) setShowSidebar(false);
+      if (window.innerWidth < 1024 && showSidebar) setShowSidebar(false);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [showSidebar]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -178,7 +180,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
     net: +(b * 0.506).toFixed(1),
     eps: +(b * 0.036).toFixed(2),
     pe: +(sd.price / (b * 0.036 || 1)).toFixed(1),
-    roe: 16.4,
+    roe: 44.8,
     fcf: +(b * 0.22).toFixed(1),
     dcf: +(b * 1.05).toFixed(2),
     graham: +(b * 0.98).toFixed(2),
@@ -190,13 +192,13 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   return (
     <div className="flex-1 flex flex-col lg:flex-row bg-brand-bd overflow-hidden min-h-0 relative">
       
-      {/* SIDEBAR TOGGLE BUTTON (Floating on right edge of chart area) */}
+      {/* SIDEBAR TOGGLE BUTTON - Dynamic position based on sidebar visibility */}
       <button 
-        className="absolute right-[10px] top-[100px] z-[50] w-[24px] h-[24px] bg-brand-bgc border border-brand-bd rounded-full flex items-center justify-center text-brand-t1 hover:text-brand-bl transition-all hover:scale-110 shadow-lg"
+        className={`absolute z-[100] w-[24px] h-[24px] bg-brand-bgc border border-brand-bd rounded-full flex items-center justify-center text-brand-t1 hover:text-brand-bl transition-all hover:scale-110 shadow-2xl ${showSidebar ? 'right-[318px]' : 'right-[10px]'} top-[100px]`}
         onClick={() => setShowSidebar(!showSidebar)}
         title={showSidebar ? "Hide Sidebar" : "Show Sidebar"}
       >
-        {showSidebar ? '→' : '←'}
+        <span className="font-mono text-[14px] leading-none mb-[1px]">{showSidebar ? '→' : '←'}</span>
       </button>
 
       <div className="flex-1 flex flex-col overflow-hidden min-h-0 min-w-0">
@@ -204,14 +206,14 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
           
           {/* HEADER HERO */}
           <div className="bg-brand-bgc border-b border-brand-bd flex items-center p-[8px_14px] gap-[20px] shrink-0 overflow-x-auto whitespace-nowrap scrollbar-none">
-            <div className="flex items-center gap-[12px]"><div className="font-mono text-[20px] font-bold text-brand-bl">{curStock}</div><div className="text-[11px] text-brand-t2 font-medium">{sd.name}</div></div>
+            <div className="flex items-center gap-[12px]"><div className="font-mono text-[20px] font-bold text-brand-bl uppercase tracking-tight">{curStock}</div><div className="text-[11px] text-brand-t2 font-medium">{sd.name}</div></div>
             <div className="flex items-baseline gap-[8px]"><div className={`font-mono text-[22px] font-bold ${sd.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>${livePrice.toFixed(2)}</div><div className={`font-mono text-[10px] ${sd.dir === 'up' ? 'text-brand-gr' : 'text-brand-re'}`}>{sd.chg > 0 ? '+' : ''}{sd.chg.toFixed(2)} ({sd.pct.toFixed(2)}%)</div></div>
-            <div className="ml-auto hidden xl:flex gap-[15px]">
-               <div className="flex flex-col"><div className="text-[9px] text-brand-t4 uppercase">Open</div><div className="font-mono text-[11px] text-brand-t1">289.65</div></div>
-               <div className="flex flex-col"><div className="text-[9px] text-brand-t4 uppercase">High</div><div className="font-mono text-[11px] text-brand-gr">213.82</div></div>
-               <div className="flex flex-col"><div className="text-[9px] text-brand-t4 uppercase">Low</div><div className="font-mono text-[11px] text-brand-re">208.91</div></div>
+            <div className="ml-auto flex gap-[12px] xl:gap-[20px]">
+               <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase tracking-wider">Open</div><div className="font-mono text-[11px] text-brand-t1">289.65</div></div>
+               <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase tracking-wider">High</div><div className="font-mono text-[11px] text-brand-gr">213.82</div></div>
+               <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase tracking-wider">Low</div><div className="font-mono text-[11px] text-brand-re">208.91</div></div>
             </div>
-            <div className="bg-brand-grg text-brand-gr font-mono text-[9px] font-bold px-[8px] py-[3px] rounded-[3px] border border-[rgba(34,197,94,.15)] animate-pulse hidden md:block">STRONG BUY</div>
+            <div className="bg-brand-grg text-brand-gr font-mono text-[9px] font-bold px-[8px] py-[3px] rounded-[3px] border border-[rgba(34,197,94,.15)] hidden md:block">STRONG BUY</div>
           </div>
 
           {/* CHART AREA */}
@@ -233,7 +235,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
 
           <div className="h-[3px] bg-brand-bd cursor-row-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingBottom(true)}></div>
 
-          {/* BOTTOM PANELS - Grid per Image Ref */}
+          {/* BOTTOM PANELS - Grid per Image Ref with Detailed Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-[1px] bg-brand-bd shrink-0 overflow-hidden" style={{ height: window.innerWidth > 1024 ? bottomHeight : 'auto' }}>
             
             {/* Fundamentals */}
@@ -241,33 +243,44 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
               <PanelHeader label="FUNDAMENTALS" dot="bl" right={<span className="text-[9px] text-brand-t4 font-mono uppercase tracking-widest">TTM ● Q1 2025</span>} />
               <div className="flex-1 p-[10px_14px] flex flex-col gap-[14px] overflow-y-auto scrollbar-none">
                 <div className="flex justify-between items-end">
-                  <div><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">Revenue</div><div className="font-mono text-[18px] font-bold text-brand-bl">${metrics.rev}B</div><div className="text-[9px] text-brand-gr font-mono">TTM ▲ 4.1%</div></div>
+                  <div><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">Revenue</div><div className="font-mono text-[19px] font-bold text-brand-bl tracking-tighter">${metrics.rev}B</div><div className="text-[9px] text-brand-gr font-mono">TTM ▲ 4.1%</div></div>
                   <div className="text-right">
-                    <div className="text-[8px] text-brand-t3 uppercase mb-[3px]">Net Income</div><div className="font-mono text-[18px] font-bold text-brand-tl">${metrics.net}B</div><div className="text-[9px] text-brand-gr font-mono">23.96% Margin ▲ 5.8%</div>
+                    <div className="text-[8px] text-brand-t3 uppercase mb-[3px]">Net Income</div><div className="font-mono text-[19px] font-bold text-brand-tl tracking-tighter">${metrics.net}B</div><div className="text-[9px] text-brand-gr font-mono">23.96% Margin ▲ 5.8%</div>
                   </div>
                 </div>
-                <div className="flex justify-between items-end border-t border-[rgba(255,255,255,.03)] pt-[10px]">
+                <div className="flex justify-between items-end border-t border-[rgba(255,255,255,.05)] pt-[10px]">
                    <div><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">P/E Ratio</div><div className="font-mono text-[16px] font-bold text-brand-or">{metrics.pe}×</div><div className="text-[8px] text-brand-t4">Sector: 27.8× <span className="text-brand-re">+3.6×</span></div></div>
                    <div className="text-right"><div className="text-[8px] text-brand-t3 uppercase mb-[3px]">EPS Diluted</div><div className="font-mono text-[16px] font-bold text-brand-bl">${metrics.eps}</div><div className="text-[8px] text-brand-gr font-mono">TTM ▲ 11.2%</div></div>
+                </div>
+                <div className="flex justify-between items-center border-t border-[rgba(255,255,255,.05)] pt-[10px]">
+                   <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase">ROE</div><div className="font-mono text-[14px] text-brand-gr font-bold">44.8%</div></div>
+                   <div className="flex flex-col text-right"><div className="text-[8px] text-brand-t4 uppercase">Free Cash Flow</div><div className="font-mono text-[14px] text-brand-tl font-bold">${metrics.fcf}B</div></div>
                 </div>
               </div>
             </div>
 
-            {/* Intrinsic Value */}
+            {/* Intrinsic Value - 8 Metrics Restore */}
             <div className="bg-brand-bgp flex flex-col min-h-0 border-l border-brand-bd">
               <PanelHeader label="INTRINSIC VALUE" dot="ye" right={<div className="flex gap-[10px] font-mono text-[9px] font-bold"><span className="text-brand-tl">DCF</span> ● <span className="text-brand-ye">GRAHAM</span></div>} />
               <div className="flex-1 p-[10px_14px] flex flex-col gap-[12px] overflow-y-auto scrollbar-none">
-                <div className="flex justify-between items-baseline font-mono">
-                   <div><div className="text-[8px] text-brand-t4 uppercase">DCF Val</div><div className="text-[15px] font-bold text-brand-tl">${metrics.dcf}</div></div>
-                   <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Market Price</div><div className="text-[15px] font-bold text-brand-t1">${livePrice.toFixed(2)}</div></div>
+                <div className="flex justify-between items-baseline font-mono border-b border-[rgba(255,255,255,.05)] pb-2">
+                   <div><div className="text-[8px] text-brand-t4 uppercase">DCF Val</div><div className="text-[17px] font-bold text-brand-tl">${metrics.dcf}</div></div>
+                   <div className="text-center"><div className="text-[8px] text-brand-t4 uppercase">Graham #</div><div className="text-[17px] font-bold text-brand-ye">${metrics.graham}</div></div>
+                   <div className="text-right"><div className="text-[8px] text-brand-t4 uppercase">Market Price</div><div className="text-[17px] font-bold text-brand-t1">${livePrice.toFixed(2)}</div></div>
                 </div>
                 <div>
                   <div className="flex justify-between text-[10px] mb-[4px]"><span className="text-brand-t3 uppercase font-bold text-[8.5px]">Margin of Safety</span><span className="text-brand-re font-bold text-[9px]">-12.2% OVERVALUED</span></div>
-                  <div className="h-[5px] bg-brand-bd rounded-full overflow-hidden flex"><div className="h-full bg-brand-or w-[45%]"></div></div>
+                  <div className="h-[6px] bg-brand-bd rounded-full overflow-hidden flex"><div className="h-full bg-brand-or w-[45%]"></div></div>
                 </div>
-                <div className="grid grid-cols-2 gap-x-[15px] gap-y-[4px] border-t border-[rgba(255,255,255,.03)] pt-[8px]">
-                  {[{l:'WACC',v:'8.4%'},{l:'Term. g',v:'3.0%'},{l:'Growth',v:'7.2%'},{l:'Yield',v:'3.8%'}].map(i=>(
-                    <div key={i.l} className="flex justify-between"><span className="text-[8px] text-brand-t4 uppercase">{i.l}</span><span className="font-mono text-[9px] font-bold text-brand-t1">{i.v}</span></div>
+                <div className="grid grid-cols-2 gap-x-[15px] gap-y-[4px] pt-[2px]">
+                  {[
+                    {l:'WACC',v:'8.4%'}, {l:'Term. g',v:'3.0%'}, {l:'Growth 5Y',v:'7.2%',c:'bl'}, {l:'FCF Yield',v:'3.8%',c:'gr'},
+                    {l:'EV/EBITDA',v:'22.4×',c:'or'}, {l:'PEG',v:'2.84'}, {l:'P/B',v:'47.2×'}, {l:'P/S',v:'8.21×'}
+                  ].map(i=>(
+                    <div key={i.l} className="flex justify-between border-b border-[rgba(255,255,255,.02)] py-[1px]">
+                      <span className="text-[8px] text-brand-t4 uppercase">{i.l}</span>
+                      <span className={`font-mono text-[9px] font-bold ${i.c ? 'text-brand-'+i.c : 'text-brand-t1'}`}>{i.v}</span>
+                    </div>
                   ))}
                 </div>
               </div>
@@ -278,6 +291,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
               <PanelHeader label="ELLIOTT WAVE" dot="pu" right={<span className="text-[9px] text-brand-tl font-mono uppercase tracking-widest">IMPULSE — WAVE 3</span>} />
               <div className="flex-1 flex flex-col p-[4px_10px] min-h-0 overflow-hidden">
                 <div className="flex-1 relative"><canvas ref={wChartRef}></canvas></div>
+                <div className="flex justify-between items-center px-1 py-1 border-t border-[rgba(255,255,255,.03)] shrink-0 bg-[rgba(0,0,0,.1)]">
+                   <div className="flex gap-3"><span className="text-[7.5px] text-brand-tl font-bold uppercase tracking-tighter">━ Impulse</span><span className="text-[7.5px] text-brand-or font-bold uppercase tracking-tighter">━ Projection</span></div>
+                   <div className="text-right text-[7.5px]"><span className="text-brand-t4">Tgt:</span> <span className="text-brand-ye">$228—$241</span> <span className="text-brand-t4 pl-1">Sup:</span> <span className="text-brand-gr">$198</span></div>
+                </div>
               </div>
             </div>
 
@@ -288,76 +305,75 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
       {showSidebar && <div className="hidden lg:block w-[3px] bg-brand-bd cursor-col-resize hover:bg-brand-bl transition-colors z-20 shrink-0" onMouseDown={() => setIsResizingRight(true)}></div>}
 
       {/* RIGHT SIDEBAR - FIXED SCROLLING & RESPONSIVE */}
-      {showSidebar && (
-        <div className="flex flex-col bg-brand-bgp shrink-0 overflow-hidden min-h-0 border-l border-brand-bd lg:border-none shadow-2xl z-40" style={{ width: window.innerWidth > 1024 ? rightWidth : '100%' }}>
+      <div 
+        className={`flex flex-col bg-brand-bgp shrink-0 overflow-hidden border-l border-brand-bd transition-all duration-300 ease-in-out ${showSidebar ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0 absolute right-0 pointer-events-none'}`} 
+        style={{ width: rightWidth, height: '100%', minWidth: showSidebar ? 280 : 0 }}
+      >
+        <div className="flex-1 overflow-y-auto scrollbar-custom scroll-smooth">
           
-          {/* Scrollable Container for ALL Sidebar Contents */}
-          <div className="flex-1 overflow-y-auto scrollbar-custom">
-            
-            {/* News Intelligence - Unified Header/Content */}
-            <div className="sticky top-0 z-10">
-               <PanelHeader label="NEWS INTELLIGENCE" dot="re" right={<span className="font-mono text-[9px] text-brand-re animate-pulse">● LIVE</span>} />
-            </div>
-            <div className="p-[2px_4px] bg-brand-bgp">
-               {news.map((n, i) => (
-                 <div key={i} className="p-[10px_12px] border-b border-brand-bd last:border-none hover:bg-brand-bgc transition-colors cursor-pointer group">
-                    <div className="flex justify-between items-center mb-[3px]">
-                      <span className="font-mono text-[9px] text-brand-bl font-bold uppercase">{n.src} <span className="text-brand-t4 font-normal ml-1">{n.time} ago</span></span>
-                      <span className={`text-[8px] font-bold py-[1px] px-[4px] rounded-[2px] ${i % 2 === 0 ? 'text-brand-gr bg-[rgba(34,197,94,.1)]' : 'text-brand-re bg-[rgba(239,68,68,.1)]'}`}>{i % 2 === 0 ? '▲ BULL' : '▼ BEAR'}</span>
-                    </div>
-                    <div className="text-[11.5px] leading-[1.4] text-brand-t1 group-hover:text-brand-bl transition-colors tracking-tight font-medium">{n.h}</div>
-                 </div>
-               ))}
-            </div>
-
-            {/* Sentiment */}
-            <div className="sticky top-0 z-10 border-t border-brand-bd">
-               <PanelHeader label="SENTIMENT" dot="bl" right={<div className="h-[4px] w-[50px] bg-brand-bd rounded-full overflow-hidden"><div className="h-full bg-brand-gr w-[75%]"></div></div>} />
-            </div>
-            <div className="p-[15px_14px] flex items-center justify-between bg-brand-bgp">
-                <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">P/L Today</div><div className="font-mono text-[14px] font-bold text-brand-gr">+$1,042</div></div>
-                <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">Snapshot</div><div className="font-mono text-[14px] font-bold text-brand-tl">BULLISH</div></div>
-                <div className="flex flex-col items-center"><div className="text-[8px] text-brand-t4 uppercase mb-1">Exposure</div><div className="font-mono text-[14px] font-bold text-brand-t1">$48,200</div></div>
-            </div>
-
-            {/* Risk Score */}
-            <div className="sticky top-0 z-10 border-t border-brand-bd">
-               <PanelHeader label="RISK SCORE" dot="ye" right={<span className="text-[8px] text-brand-ye uppercase tracking-widest font-bold">Composite Model</span>} />
-            </div>
-            <div className="p-[15px_16px] flex flex-col gap-[15px] bg-brand-bgp pb-4 px-4">
-                <div className="flex items-center gap-[20px]">
-                  <div className="relative w-[80px] h-[55px]">
-                    <svg width="80" height="55" viewBox="0 0 100 60">
-                       <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" strokeWidth="10" strokeLinecap="round" />
-                       <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="url(#rg4)" strokeWidth="10" strokeLinecap="round" strokeDasharray="125.6" strokeDashoffset={125.6 * (1 - metrics.risk/100)} />
-                       <defs><linearGradient id="rg4"><stop offset="0%" stopColor="#22c55e"/><stop offset="50%" stopColor="#eab308"/><stop offset="100%" stopColor="#ef4444"/></linearGradient></defs>
-                       <g style={{ transformOrigin: '50px 50px', transform: `rotate(${riskNeedle}deg)` }}><line x1="50" y1="50" x2="50" y2="15" stroke="white" strokeWidth="3" strokeLinecap="round" /></g>
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center pt-8"><div className="text-center leading-[1]"><div className="font-mono text-[14px] font-bold text-brand-ye">{metrics.risk}<span className="text-[10px] font-normal text-brand-t4">/100</span></div></div></div>
-                  </div>
-                  <div className="flex-1 flex flex-col gap-[4px]">
-                    {[ {l:'Beta (β)', v:'1.18', c:'ye'}, {l:'Liquidity', v:'HIGH', c:'gr'} ].map((r,i)=>(
-                      <div key={i} className="flex items-center justify-between">
-                        <span className="text-[8px] text-brand-t4 uppercase tracking-tighter">{r.l}</span>
-                        <span className={`font-mono text-[9px] font-bold text-brand-${r.c}`}>{r.v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-            </div>
-
-            {/* Key Ratios */}
-            <div className="sticky top-0 z-10 border-t border-brand-bd">
-               <PanelHeader label="KEY RATIOS" dot="tl" right={<span className="text-[8px] text-brand-t4 font-mono uppercase">Sector Rank: #1</span>} />
-            </div>
-            <div className="p-[15px_16px] grid grid-cols-2 gap-[15px] bg-brand-bgp pb-8">
-                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">Div Yield</div><div className="font-mono text-[13px] font-bold text-brand-gr">0.48%</div></div>
-                <div className="flex flex-col"><div className="text-[8px] text-brand-t4 uppercase mb-1">Payout</div><div className="font-mono text-[13px] font-bold text-brand-or">15.4%</div></div>
-            </div>
-
+          {/* News Intelligence - Unified Header/Content */}
+          <div className="sticky top-0 z-30 shadow-md">
+             <PanelHeader label="NEWS INTELLIGENCE" dot="re" right={<span className="font-mono text-[9px] text-brand-re animate-pulse">● LIVE</span>} />
           </div>
+          <div className="p-[2px_4px] bg-brand-bgp">
+             {news.map((n, i) => (
+               <div key={i} className="p-[10px_12px] border-b border-brand-bd last:border-none hover:bg-brand-bgc transition-all cursor-pointer group">
+                  <div className="flex justify-between items-center mb-[3px]">
+                    <span className="font-mono text-[9px] text-brand-bl font-bold uppercase tracking-tight">{n.src} <span className="text-brand-t4 font-normal ml-1">{n.time} ago</span></span>
+                    <span className={`text-[8px] font-bold py-[1px] px-[5px] rounded-[2px] ${i % 2 === 0 ? 'text-brand-gr bg-[rgba(34,197,94,.12)] border border-[rgba(34,197,94,.1)]' : 'text-brand-re bg-[rgba(239,68,68,.12)] border border-[rgba(239,68,68,.1)]'}`}>{i % 2 === 0 ? '▲ BULL' : '▼ BEAR'}</span>
+                  </div>
+                  <div className="text-[12px] leading-[1.45] text-brand-t1 group-hover:text-brand-bl transition-colors tracking-tight font-medium">{n.h}</div>
+               </div>
+             ))}
+          </div>
+
+          {/* Sentiment */}
+          <div className="sticky top-0 z-20 border-t border-brand-bd shadow-sm">
+             <PanelHeader label="SENTIMENT" dot="bl" right={<div className="h-[4px] w-[50px] bg-brand-bd rounded-full overflow-hidden"><div className="h-full bg-brand-gr w-[75%]"></div></div>} />
+          </div>
+          <div className="p-[18px_14px] flex items-center justify-between bg-brand-bgc border-b border-brand-bd">
+              <div className="flex flex-col items-center"><div className="text-[9px] text-brand-t4 uppercase mb-1 font-bold">P/L Today</div><div className="font-mono text-[15px] font-bold text-brand-gr">+$1,042</div></div>
+              <div className="flex flex-col items-center border-x border-brand-bd px-4"><div className="text-[9px] text-brand-t4 uppercase mb-1 font-bold">Snapshot</div><div className="font-mono text-[15px] font-bold text-brand-tl">BULLISH</div></div>
+              <div className="flex flex-col items-center"><div className="text-[9px] text-brand-t4 uppercase mb-1 font-bold">Exposure</div><div className="font-mono text-[15px] font-bold text-brand-t1">$48,200</div></div>
+          </div>
+
+          {/* Risk Score */}
+          <div className="sticky top-0 z-10 border-t border-brand-bd">
+             <PanelHeader label="RISK SCORE" dot="ye" right={<span className="text-[8px] text-brand-ye uppercase tracking-widest font-bold">Composite Model</span>} />
+          </div>
+          <div className="p-[20px_16px] flex flex-col gap-[20px] bg-brand-bgp pb-6">
+              <div className="flex items-center gap-[25px]">
+                <div className="relative w-[90px] h-[60px]">
+                  <svg width="90" height="60" viewBox="0 0 100 60">
+                     <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#1e293b" strokeWidth="12" strokeLinecap="round" />
+                     <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="url(#rg5)" strokeWidth="12" strokeLinecap="round" strokeDasharray="125.6" strokeDashoffset={125.6 * (1 - metrics.risk/100)} />
+                     <defs><linearGradient id="rg5"><stop offset="0%" stopColor="#22c55e"/><stop offset="50%" stopColor="#eab308"/><stop offset="100%" stopColor="#ef4444"/></linearGradient></defs>
+                     <g style={{ transformOrigin: '50px 50px', transform: `rotate(${riskNeedle}deg)` }}><line x1="50" y1="50" x2="50" y2="15" stroke="white" strokeWidth="4" strokeLinecap="round" /></g>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center pt-10"><div className="text-center leading-[1]"><div className="font-mono text-[17px] font-bold text-brand-ye">{metrics.risk}<span className="text-[11px] font-normal text-brand-t4">/100</span></div></div></div>
+                </div>
+                <div className="flex-1 flex flex-col gap-[8px]">
+                  {[ {l:'Beta (β)', v:'1.18', c:'ye'}, {l:'Liquidity', v:'HIGH', c:'gr'} ].map((r,i)=>(
+                    <div key={i} className="flex items-center justify-between border-b border-[rgba(255,255,255,.03)] pb-1">
+                      <span className="text-[9px] text-brand-t4 uppercase font-bold tracking-tight">{r.l}</span>
+                      <span className={`font-mono text-[11px] font-bold text-brand-${r.c}`}>{r.v}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+          </div>
+
+          {/* Key Ratios */}
+          <div className="sticky top-0 z-0 border-t border-brand-bd shadow-inner">
+             <PanelHeader label="KEY RATIOS" dot="tl" right={<span className="text-[8px] text-brand-t4 font-mono uppercase font-bold">Sector Rank: #1</span>} />
+          </div>
+          <div className="p-[20px_16px] grid grid-cols-2 gap-[20px] bg-brand-bgc pb-12">
+              <div className="flex flex-col"><div className="text-[9px] text-brand-t4 uppercase mb-2 font-bold tracking-wider">Div Yield</div><div className="font-mono text-[16px] font-bold text-brand-gr">0.48%</div><div className="text-[8px] text-brand-t4 mt-1">▲ Sect High</div></div>
+              <div className="flex flex-col"><div className="text-[9px] text-brand-t4 uppercase mb-2 font-bold tracking-wider">Payout</div><div className="font-mono text-[16px] font-bold text-brand-or">15.4%</div><div className="text-[8px] text-brand-t4 mt-1">▼ Sect Low</div></div>
+          </div>
+
         </div>
-      )}
+      </div>
     </div>
   );
 };
