@@ -47,114 +47,146 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
     if (vChartInst.current) vChartInst.current.destroy();
     if (wChartInst.current) wChartInst.current.destroy();
 
-    const d = STOCKS[curStock] || STOCKS['AAPL'];
-    const ctxP = pChartRef.current?.getContext('2d');
-    const ctxV = vChartRef.current?.getContext('2d');
-    const ctxW = wChartRef.current?.getContext('2d');
+    const timer = requestAnimationFrame(() => {
+      const d = STOCKS[curStock] || STOCKS['AAPL'];
+      const ctxP = pChartRef.current?.getContext('2d');
+      const ctxV = vChartRef.current?.getContext('2d');
+      const ctxW = wChartRef.current?.getContext('2d');
 
-    const tfN: any = { '1D': 26, '5D': 50, '1M': 60, '3M': 90, '6M': 126, '1Y': 252, '5Y': 260 };
-    const n = tfN[tf] || 60;
-    const ohlcD = genOHLC(n, d.base, d.vol);
-    const lbls = genLbls(n, tf);
-    const closes = ohlcD.map(x => x.c);
-    const ma20 = calcMA(closes, 20);
-    const ma50 = calcMA(closes, 50);
-    const ema21 = calcEMA(closes, 21);
-    const bb = calcBB(closes, 20);
-    const vwap = calcVWAP(ohlcD);
-    const vols = ohlcD.map(x => x.v);
-    const vcol = ohlcD.map(x => x.c >= x.o ? 'rgba(20,184,166,.5)' : 'rgba(239,68,68,.4)');
+      const tfN: any = { '1D': 26, '5D': 50, '1M': 60, '3M': 90, '6M': 126, '1Y': 252, '5Y': 260 };
+      const n = tfN[tf] || 60;
+      const ohlcD = genOHLC(n, d.base, d.vol);
+      const lbls = genLbls(n, tf);
+      const closes = ohlcD.map(x => x.c);
+      const ma20 = calcMA(closes, 20);
+      const ma50 = calcMA(closes, 50);
+      const ema21 = calcEMA(closes, 21);
+      const bb = calcBB(closes, 20);
+      const vwap = calcVWAP(ohlcD);
+      const vols = ohlcD.map(x => x.v);
+      const vcol = ohlcD.map(x => x.c >= x.o ? 'rgba(20,184,166,.5)' : 'rgba(239,68,68,.4)');
 
-    if (ctxP) {
-      let pDs: any;
-      if (chartType === 'line') {
-        pDs = { label: 'P', data: closes, type: 'line', borderColor: '#0ea5e9', borderWidth: 1.8, pointRadius: 0, fill: false, order: 10, tension: .2 };
-      } else if (chartType === 'area') {
-        const g = ctxP.createLinearGradient(0, 0, 0, 280);
-        g.addColorStop(0, 'rgba(14,165,233,.22)');
-        g.addColorStop(1, 'rgba(14,165,233,.01)');
-        pDs = { label: 'P', data: closes, type: 'line', borderColor: '#0ea5e9', borderWidth: 1.8, pointRadius: 0, fill: true, backgroundColor: g, order: 10, tension: .3 };
-      } else {
-        pDs = { label: 'P', data: closes, type: 'bar', backgroundColor: 'transparent', borderColor: 'transparent', barPercentage: .01, order: 10, ohlcD: ohlcD, chartT: chartType };
-      }
+      if (ctxP) {
+        let pDs: any;
+        if (chartType === 'line') {
+          pDs = { label: 'P', data: closes, type: 'line', borderColor: '#0ea5e9', borderWidth: 1.8, pointRadius: 0, fill: false, order: 10, tension: .2 };
+        } else if (chartType === 'area') {
+          const g = ctxP.createLinearGradient(0, 0, 0, 280);
+          g.addColorStop(0, 'rgba(14,165,233,.22)');
+          g.addColorStop(1, 'rgba(14,165,233,.01)');
+          pDs = { label: 'P', data: closes, type: 'line', borderColor: '#0ea5e9', borderWidth: 1.8, pointRadius: 0, fill: true, backgroundColor: g, order: 10, tension: .3 };
+        } else {
+          pDs = { label: 'P', data: closes, type: 'bar', backgroundColor: 'transparent', borderColor: 'transparent', barPercentage: .01, order: 10, ohlcD: ohlcD, chartT: chartType };
+        }
 
-      const ds = [pDs];
-      if (showMA) { ds.push({ label: 'MA20', data: ma20, type: 'line', borderColor: 'rgba(14,165,233,.82)', borderWidth: 1.5, pointRadius: 0, order: 3, fill: false } as any); ds.push({ label: 'MA50', data: ma50, type: 'line', borderColor: 'rgba(249,115,22,.72)', borderWidth: 1.5, pointRadius: 0, order: 4, fill: false } as any); }
-      if (showBB) { ds.push({ label: 'BB+', data: bb.u, type: 'line', borderColor: 'rgba(100,116,139,.42)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, order: 5, fill: false } as any); ds.push({ label: 'BB-', data: bb.l, type: 'line', borderColor: 'rgba(100,116,139,.42)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, order: 6, fill: false } as any); }
-      if (showVWAP) ds.push({ label: 'VWAP', data: vwap, type: 'line', borderColor: 'rgba(234,179,8,.8)', borderWidth: 1.5, borderDash: [5, 2], pointRadius: 0, order: 7, fill: false } as any);
-      if (showEMA) ds.push({ label: 'EMA21', data: ema21, type: 'line', borderColor: 'rgba(139,92,246,.8)', borderWidth: 1.5, pointRadius: 0, order: 8, fill: false } as any);
+        const ds = [pDs];
+        if (showMA) { 
+          ds.push({ label: 'MA20', data: ma20, type: 'line', borderColor: 'rgba(14,165,233,.82)', borderWidth: 1.5, pointRadius: 0, order: 3, fill: false } as any); 
+          ds.push({ label: 'MA50', data: ma50, type: 'line', borderColor: 'rgba(249,115,22,.72)', borderWidth: 1.5, pointRadius: 0, order: 4, fill: false } as any); 
+        }
+        if (showBB) { 
+          ds.push({ label: 'BB+', data: bb.u, type: 'line', borderColor: 'rgba(100,116,139,.42)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, order: 5, fill: false } as any); 
+          ds.push({ label: 'BB-', data: bb.l, type: 'line', borderColor: 'rgba(100,116,139,.42)', borderWidth: 1, borderDash: [4, 3], pointRadius: 0, order: 6, fill: false } as any); 
+        }
+        if (showVWAP) ds.push({ label: 'VWAP', data: vwap, type: 'line', borderColor: 'rgba(234,179,8,.8)', borderWidth: 1.5, borderDash: [5, 2], pointRadius: 0, order: 7, fill: false } as any);
+        if (showEMA) ds.push({ label: 'EMA21', data: ema21, type: 'line', borderColor: 'rgba(139,92,246,.8)', borderWidth: 1.5, pointRadius: 0, order: 8, fill: false } as any);
 
-      pChartInst.current = new Chart(ctxP, {
-        type: 'bar',
-        data: { labels: lbls, datasets: ds },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: { duration: 280 },
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              enabled: true, backgroundColor: 'rgba(7,12,24,.97)', borderColor: '#1e3050', borderWidth: 1,
-              titleFont: { family: 'IBM Plex Mono', size: 10 }, bodyFont: { family: 'IBM Plex Mono', size: 10 },
-              callbacks: {
-                title: (ctx2) => lbls[ctx2[0].dataIndex] || '',
-                label: (ctx2) => {
-                  if (ctx2.dataset.label === 'P' || ctx2.parsed.y === null) return '';
-                  return ' ' + ctx2.dataset.label + ': $' + ctx2.parsed.y.toFixed(2);
+        pChartInst.current = new Chart(ctxP, {
+          type: 'bar',
+          data: { labels: lbls, datasets: ds },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: { duration: 280 },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                enabled: true, backgroundColor: 'rgba(7,12,24,.97)', borderColor: '#1e3050', borderWidth: 1,
+                titleFont: { family: 'IBM Plex Mono', size: 10 }, bodyFont: { family: 'IBM Plex Mono', size: 10 },
+                callbacks: {
+                  title: (ctx2) => lbls[ctx2[0].dataIndex] || '',
+                  label: (ctx2) => {
+                    if (ctx2.dataset.label === 'P' || ctx2.parsed.y === null) return '';
+                    return ' ' + ctx2.dataset.label + ': $' + ctx2.parsed.y.toFixed(2);
+                  }
                 }
               }
+            },
+            scales: {
+              x: { ticks: { color: '#334155', font: { family: 'IBM Plex Mono', size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } },
+              y: { position: 'right', ticks: { color: '#64748b', font: { family: 'IBM Plex Mono', size: 10 }, callback: (v) => '$' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } }
             }
+          }
+        });
+      }
+      if (ctxV) {
+        vChartInst.current = new Chart(ctxV, {
+          type: 'bar',
+          data: {
+            labels: lbls,
+            datasets: [{ data: vols, backgroundColor: vcol, borderWidth: 0, borderRadius: 1 }]
           },
-          scales: {
-            x: { ticks: { color: '#334155', font: { family: 'IBM Plex Mono', size: 9 }, maxTicksLimit: 10, maxRotation: 0 }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } },
-            y: { position: 'right', ticks: { color: '#64748b', font: { family: 'IBM Plex Mono', size: 10 }, callback: (v) => '$' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.8)' }, border: { color: '#172038' } }
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: { duration: 280 },
+            plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            scales: {
+              x: { display: false },
+              y: { position: 'right', ticks: { color: '#334155', font: { family: 'IBM Plex Mono', size: 8 }, callback: (v) => (Number(v) / 1e6).toFixed(0) + 'M' }, grid: { color: 'rgba(23,32,56,.5)' }, border: { color: '#172038' } }
+            }
           }
-        }
-      });
-    }
-    if (ctxV) {
-      vChartInst.current = new Chart(ctxV, {
-        type: 'bar',
-        data: {
-          labels: lbls,
-          datasets: [{ data: vols, backgroundColor: vcol, borderWidth: 0, borderRadius: 1 }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false, animation: { duration: 280 },
-          plugins: { legend: { display: false }, tooltip: { enabled: false } },
-          scales: {
-            x: { display: false },
-            y: { position: 'right', ticks: { color: '#334155', font: { family: 'IBM Plex Mono', size: 8 }, callback: (v) => (Number(v) / 1e6).toFixed(0) + 'M' }, grid: { color: 'rgba(23,32,56,.5)' }, border: { color: '#172038' } }
+        });
+      }
+      if (ctxW) {
+        const baseVal = d?.base || 185;
+        const imp = [baseVal * .92, baseVal, baseVal * .96, baseVal * 1.08, baseVal * 1.02, baseVal * 1.16, baseVal * 1.08, baseVal * 1.22, baseVal * 1.15, baseVal * 1.28];
+        const prj = [null, null, null, null, null, null, null, baseVal * 1.22, baseVal * 1.25, baseVal * 1.35];
+        wChartInst.current = new Chart(ctxW, {
+          type: 'line',
+          data: {
+            labels: ['', '1', '', '2', '', '3', '', '4', '', '5'],
+            datasets: [
+              { data: imp as any, borderColor: 'rgba(20,184,166,.92)', borderWidth: 2, pointRadius: imp.map((_, i) => i % 2 === 1 ? 4 : 1.5), pointBackgroundColor: imp.map((_, i) => i % 2 === 1 ? '#14b8a6' : 'transparent'), pointBorderColor: imp.map((_, i) => i % 2 === 1 ? '#14b8a6' : 'rgba(20,184,166,.3)'), fill: false, tension: .2 },
+              { data: prj as any, borderColor: 'rgba(249,115,22,.5)', borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, fill: false, tension: .4 }
+            ]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(7,12,24,.96)', borderColor: '#1e3050', borderWidth: 1, bodyFont: { family: 'IBM Plex Mono', size: 10 }, callbacks: { label: (ctx2) => ctx2.parsed.y ? ' $' + ctx2.parsed.y.toFixed(2) : '' } } },
+            scales: {
+              x: { ticks: { color: '#14b8a6', font: { family: 'IBM Plex Mono', size: 11, weight: 'bold' } }, grid: { color: 'rgba(23,32,56,.7)' }, border: { display: true, color: '#172038' } },
+              y: { position: 'right', ticks: { color: '#64748b', font: { family: 'IBM Plex Mono', size: 9 }, callback: (v) => '$' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.7)' }, border: { display: true, color: '#172038' } }
+            }
           }
-        }
-      });
-    }
-    if (ctxW) {
-      const b = d?.base || 185;
-      const imp = [b * .92, b, b * .96, b * 1.08, b * 1.02, b * 1.16, b * 1.08, b * 1.22, b * 1.15, b * 1.28];
-      const prj = [null, null, null, null, null, null, null, b * 1.22, b * 1.25, b * 1.35];
-      wChartInst.current = new Chart(ctxW, {
-        type: 'line',
-        data: {
-          labels: ['', '1', '', '2', '', '3', '', '4', '', '5'],
-          datasets: [
-            { data: imp as any, borderColor: 'rgba(20,184,166,.92)', borderWidth: 2, pointRadius: imp.map((_, i) => i % 2 === 1 ? 4 : 1.5), pointBackgroundColor: imp.map((_, i) => i % 2 === 1 ? '#14b8a6' : 'transparent'), pointBorderColor: imp.map((_, i) => i % 2 === 1 ? '#14b8a6' : 'rgba(20,184,166,.3)'), fill: false, tension: .2 },
-            { data: prj as any, borderColor: 'rgba(249,115,22,.5)', borderWidth: 1.5, borderDash: [5, 3], pointRadius: 0, fill: false, tension: .4 }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(7,12,24,.96)', borderColor: '#1e3050', borderWidth: 1, bodyFont: { family: 'IBM Plex Mono', size: 10 }, callbacks: { label: (ctx2) => ctx2.parsed.y ? ' $' + ctx2.parsed.y.toFixed(2) : '' } } },
-          scales: {
-            x: { ticks: { color: '#14b8a6', font: { family: 'IBM Plex Mono', size: 11, weight: 'bold' } }, grid: { color: 'rgba(23,32,56,.7)' }, border: { display: true, color: '#172038' } },
-            y: { position: 'right', ticks: { color: '#64748b', font: { family: 'IBM Plex Mono', size: 9 }, callback: (v) => '$' + Number(v).toFixed(0) }, grid: { color: 'rgba(23,32,56,.7)' }, border: { display: true, color: '#172038' } }
-          }
-        }
-      });
-    }
+        });
+      }
+    });
 
+    return () => cancelAnimationFrame(timer);
   }, [loading, curStock, tf, chartType, showMA, showBB, showVWAP, showEMA]);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      pChartInst.current?.destroy();
+      vChartInst.current?.destroy();
+      wChartInst.current?.destroy();
+    };
+  }, []);
+
   const sd = STOCKS[curStock] || STOCKS['AAPL'];
+
+  // --- Dynamic News Generation --- //
+  const newsItems = NEWS2.map(item => {
+    const sName = sd.name.split(' ')[0]; // E.g., 'Apple', 'NVIDIA', 'Tesla'
+    const h = item.h
+      .replace(/Apple|iPhone|MacBook|App Store|Vision Pro/g, match => {
+        if (match === 'iPhone') return curStock === 'TSLA' ? 'Model 3' : curStock === 'NVDA' ? 'H100' : 'Product';
+        if (match === 'Vision Pro') return curStock === 'TSLA' ? 'CyberTruck' : curStock === 'NVDA' ? 'Omniverse' : 'Next-gen';
+        if (match === 'App Store') return curStock === 'TSLA' ? 'Supercharger' : curStock === 'NVDA' ? 'AI Cloud' : 'Platform';
+        return sName;
+      })
+      .replace(/Services/g, curStock === 'NVDA' ? 'Data Center' : curStock === 'TSLA' ? 'Energy' : 'Services');
+    return { ...item, h };
+  });
 
   // --- Derived financial metrics — all update when curStock changes --- //
   const b = sd.base;
@@ -376,7 +408,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, loading 
         <div className="bg-brand-bgp flex flex-col overflow-hidden">
             <PanelHeader label="NEWS INTELLIGENCE" dot="bl" right={<span className="font-mono text-[9px] text-brand-t3 flex items-center gap-[3px]"><span className="text-brand-re animate-flash">●</span> LIVE</span>} />
           <div className="flex-1 overflow-y-auto scrollbar-custom">
-            {NEWS2.map((n, i) => (
+            {newsItems.map((n, i) => (
               <div key={i} className="p-[8px_11px] border-b border-brand-bd cursor-pointer transition-colors hover:bg-brand-bgc">
                 <div className="flex items-center gap-[5px] mb-[3px]">
                   <span className="font-mono text-[9px] text-brand-bl uppercase tracking-[.05em]">{n.src}</span>
