@@ -201,6 +201,15 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
       }))
     : [];
 
+  const filings = stockData?.exchangeFilings?.length
+    ? stockData.exchangeFilings.map((f: any) => ({
+        h: f.title,
+        date: f.date || 'Recent',
+        url: f.url,
+        source: f.source || 'NSE',
+      }))
+    : [];
+
   const riskScore = insights?.sentimentScore || 50;
   const riskNeedle = -90 + (riskScore / 100) * 180;
 
