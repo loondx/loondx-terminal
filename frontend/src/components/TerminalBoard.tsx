@@ -21,6 +21,7 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
   const [bottomHeight, setBottomHeight] = useState(200);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
+  const [showBottom, setShowBottom] = useState(window.innerWidth >= 1024);
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1280);
 
   const isBackend = !!stockData?.stock;
@@ -375,17 +376,33 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
                 ))}
               </div>
               <div className="ml-auto flex items-center gap-3">
+                 <div className="flex items-center gap-1.5 border-r border-brand-bd pr-3 mr-1">
+                    <button 
+                      onClick={() => setShowBottom(!showBottom)} 
+                      className={`p-1 rounded hover:bg-brand-bge transition-colors ${showBottom ? 'text-brand-bl' : 'text-brand-t4'}`}
+                      title="Toggle Intelligence Panel"
+                    >
+                      <span className="text-[14px]">📊</span>
+                    </button>
+                    <button 
+                      onClick={() => setShowSidebar(!showSidebar)} 
+                      className={`p-1 rounded hover:bg-brand-bge transition-colors ${showSidebar ? 'text-brand-pu' : 'text-brand-t4'}`}
+                      title="Toggle Sidebar"
+                    >
+                      <span className="text-[14px]">📑</span>
+                    </button>
+                 </div>
                  {activeMainTab === 'CHART' && (
                     <div className="flex items-center gap-2">
                       {['1D','1M','1Y'].map(v => <button key={v} onClick={() => setTf(v)} className={`text-[10px] font-mono px-2 py-0.5 rounded ${tf===v?'text-brand-bl bg-brand-blg border border-brand-bl':'text-brand-t4'}`}>{v}</button>)}
                     </div>
                  )}
-                 <div className="w-[1px] h-[16px] bg-brand-bd"></div>
-                 <div className="flex items-center gap-1">
+                 <div className="w-[1px] h-[16px] bg-brand-bd hidden xs:block"></div>
+                 <div className="hidden xs:flex items-center gap-1">
                     <span className="text-[9px] font-mono text-brand-t4 uppercase tracking-widest">Data:</span>
-                    <span className="text-[9px] font-mono text-brand-t2">YAHOO + SCREENER</span>
-                 </div>
-              </div>
+                    <span className="text-[9px] font-mono text-brand-t2">YAHOO+SCREENER</span>
+                  </div>
+               </div>
             </div>
 
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -416,11 +433,12 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
           </div>
 
           {/* BOTTOM INTELLIGENCE SECTION - Locked Visibility Engineering */}
-          <div className="flex-[2] flex flex-col overflow-hidden relative z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] bg-[#070c18] border-t border-brand-bd"
+          <div className={`flex-none flex flex-col overflow-hidden relative z-20 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] bg-[#070c18] border-t border-brand-bd transition-all duration-300 ${!showBottom ? 'h-0 border-none' : ''}`}
             style={{ 
-               height: window.innerWidth > 1024 ? `${Math.floor(Math.max(bottomHeight, 240))}px` : '35vh',
-               minHeight: '180px',
-               maxHeight: '45vh'
+               height: showBottom ? (window.innerWidth > 1024 ? `${Math.floor(Math.max(bottomHeight, 240))}px` : '35vh') : '0',
+               minHeight: showBottom ? '160px' : '0',
+               maxHeight: '45vh',
+               opacity: showBottom ? 1 : 0
             }}>
             <div className="h-[3px] w-full bg-brand-bd cursor-row-resize hover:bg-brand-bl transition-colors z-30 shrink-0" onMouseDown={() => setIsResizingBottom(true)}></div>
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -491,11 +509,36 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
           </div>
         </div>
 
+        {/* ── SIDEBAR BACKDROP (Mobile Only) ── */}
+        {showSidebar && (
+          <div 
+            className="fixed inset-0 bg-[rgba(0,0,0,0.6)] backdrop-blur-[2px] z-[999] lg:hidden animate-in fade-in duration-300"
+            onClick={() => setShowSidebar(false)}
+          />
+        )}
+
         {/* ── SIDEBAR (Right) ── */}
         <div 
-          className={`flex-[1] min-w-[280px] bg-brand-bg border-l border-brand-bd flex flex-col transition-all duration-300 relative z-40 ${showSidebar ? '' : 'hidden pointer-events-none'}`} 
-          style={{ maxWidth: rightWidth }}
+          className={`
+            fixed lg:relative top-0 right-0 h-full lg:h-auto 
+            bg-brand-bg border-l border-brand-bd flex flex-col 
+            transition-all duration-300 z-[1000] lg:z-40
+            ${showSidebar ? 'translate-x-0 w-[85vw] sm:w-[330px] lg:translate-x-0 lg:flex' : 'translate-x-full lg:hidden lg:translate-x-full pointer-events-none'}
+            ${showSidebar && window.innerWidth >= 1024 ? 'lg:flex-[1]' : ''}
+          `}
+          style={{ 
+            maxWidth: window.innerWidth >= 1024 ? rightWidth : 'none',
+            boxShadow: showSidebar && window.innerWidth < 1024 ? '-20px 0 50px rgba(0,0,0,0.9)' : 'none'
+          }}
         >
+          {showSidebar && (
+            <button 
+              onClick={() => setShowSidebar(false)}
+              className="lg:hidden absolute left-[-48px] top-[14px] w-[40px] h-[40px] bg-brand-bg border border-brand-bd border-r-0 rounded-l-md flex items-center justify-center text-brand-t1 z-[1001] shadow-[-5px_0_15px_rgba(0,0,0,0.5)] active:bg-brand-bge"
+            >
+              <span className="text-[18px]">✕</span>
+            </button>
+          )}
           <div className="absolute left-[-2px] top-0 bottom-0 w-[4px] cursor-col-resize hover:bg-brand-bl transition-colors z-50" onMouseDown={() => setIsResizingRight(true)}></div>
           
           <div className="flex-1 overflow-y-auto flex flex-col scrollbar-custom bg-brand-bg">
