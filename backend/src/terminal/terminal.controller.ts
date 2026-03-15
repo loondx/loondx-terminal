@@ -71,6 +71,19 @@ export class TerminalController {
     try {
       if (!stock || isStale) {
         stock = await this.fetchAndPersist(key);
+      } else {
+        // User requested EXACT latest price on every search, bypass 15min delay for pure price
+        const live = await this.scraperService.fetchLivePrice(key);
+        if (live && live.price) {
+           stock.price = live.price;
+           stock.change = live.change;
+           stock.changePercent = live.changePercent;
+           // Fire and forget DB update so it's fresh for next API calls
+           this.prisma.stock.update({ 
+              where: { id: stock.id }, 
+              data: { price: live.price, change: live.change, changePercent: live.changePercent, lastUpdated: new Date() } 
+           }).catch((e) => this.logger.warn(`Failed async price update: ${e.message}`));
+        }
       }
     } catch (e) {
       this.logger.error(`Failed to refresh stock ${key}: ${e.message}`);
@@ -81,9 +94,9 @@ export class TerminalController {
     const sectorName = stock.sector?.name;
 
     const [liveNews, socialFeed, exchangeFilings, narrative] = await Promise.all([
-      this.getCached(`news:${key}`,    () => this.scraperService.scrapeNews(key, companyName, sectorName), 600),
-      this.getCached(`social:${key}`,  () => this.scraperService.scrapeReddit(key, companyName, sectorName), 600),
-      this.getCached(`filings:${key}`, () => this.scraperService.scrapeExchangeFilings(key),  1800),
+      this.getCached(`news:${key}`,    () => this.scraperService.scrapeNews(key, companyName, sectorName, 120), 600),
+      this.getCached(`social:${key}`,  () => this.scraperService.scrapeReddit(key, companyName, sectorName, 120), 600),
+      this.getCached(`filings:${key}`, () => this.scraperService.scrapeExchangeFilings(key, 120),  1800),
       this.getMarketNarrative(),
     ]);
 
@@ -96,8 +109,20 @@ export class TerminalController {
       exchangeFilings,
       macroSignals,
       narrative,
+      supplyChain: await this.getSupplyChain(key),
       serverTime: new Date(),
     };
+  }
+
+  // ─── GET /api/terminal/supply-chain/:ticker ─────────────────────────────────
+  @Get('supply-chain/:ticker')
+  async getSupplyChain(@Param('ticker') ticker: string) {
+    const key = ticker.toUpperCase().split('.')[0];
+    return this.getCached(`supply-chain:${key}`, async () => {
+      const stock = await this.prisma.stock.findUnique({ where: { ticker: key } });
+      if (!stock) return null;
+      return this.aiService.mapSupplyChain(stock.name, key, 'Linked Industry');
+    }, 86400); // Cache for 24h as supply chains don't change daily
   }
 
   // ─── GET /api/terminal/narrative ─────────────────────────────────────────────
@@ -222,8 +247,8 @@ export class TerminalController {
       let ai: any = null;
       try {
         const [news, social] = await Promise.all([
-          this.scraperService.scrapeNews(ticker, stock.name),
-          this.scraperService.scrapeReddit(ticker, stock.name),
+          this.scraperService.scrapeNews(ticker, stock.name, stock.sector?.name, 168),
+          this.scraperService.scrapeReddit(ticker, stock.name, stock.sector?.name, 168),
         ]);
         const macro = await this.prisma.macroSignal.findMany();
         ai = await this.aiService.deepStockAnalysis(stock, hist, news, macro);
@@ -231,7 +256,7 @@ export class TerminalController {
         this.logger.warn(`[${ticker}] AI Research synchronization delayed: ${err.message}`);
       }
 
-      if (ai) {
+      if (ai && ai.summary) {
         await this.prisma.aIInsight.deleteMany({ where: { stockId: stock.id } });
         await this.prisma.aIInsight.create({
           data: {

@@ -10,16 +10,18 @@
 
 | Feature | Source | Storage |
 |---|---|---|
-| **Live stock price** | Yahoo Finance API (same as Google) | DB (refreshed every 30 min) |
+| **Live stock price** | Google Finance (Primary) + Yahoo | DB (Live async override) |
 | **Company fundamentals** | Screener.in | DB (P/E, ROE, Debt, Market Cap, EPS) |
 | **Quarterly financials** | Screener.in | DB (JSON — quarters, P&L, balance sheet) |
-| **AI analysis** | Claude (Anthropic) | DB (BUY/HOLD/SELL, intrinsic value, summary) |
-| **Latest news** | Google News + ET Markets + Moneycontrol | Redis only (10 min TTL) |
+| **AI analysis** | OpenRouter (Primary) + Claude | DB (BUY/HOLD/SELL, intrinsic value, summary) |
+| **Latest news & blogs**| Google News, Yahoo, ET, MC, Fin-Blogs | Redis only (168h rolling window) |
 | **Exchange filings** | NSE official API | Redis only (30 min TTL) |
-| **Reddit sentiment** | r/IndianStockMarket + r/IndiaInvestments | Redis only (10 min TTL) |
+| **Reddit sentiment** | r/IndianStockMarket + 4 others | Redis only (168h rolling window) |
 | **Macro signals** | Seeded (USD/INR, Repo Rate, Oil) | DB |
 
 **Design rule:** Only things that are slow/expensive to re-fetch live in PostgreSQL. Everything ephemeral (news, social, filings) stays in Redis and expires automatically.
+
+> **For in-depth explanations on data filtering, trust protocols, and AI pipelines, see [ARCHITECTURE.md](ARCHITECTURE.md).**
 
 ---
 
@@ -30,14 +32,13 @@ Browser (React + Chart.js)
     │
     ▼
 NestJS API (port 3000)
-    ├── Yahoo Finance API  ──► Live price (₹, %, exchange)
+    ├── Google Finance     ──► Exact Live price (₹, %, exchange)
     ├── Screener.in        ──► Fundamentals (ROE, P/E, quarterly tables)
-    ├── Google News RSS    ──► News (10 min Redis cache)
-    ├── ET Markets RSS     ──► News (10 min Redis cache)
-    ├── Moneycontrol RSS   ──► News (10 min Redis cache)
+    ├── Google+Yahoo RSS   ──► Fin-Blogs, Analysis, and Global News
+    ├── ET/MC RSS Feeds    ──► Local Indian Market News
     ├── NSE API            ──► Exchange filings (30 min Redis cache)
-    ├── Reddit RSS         ──► Social sentiment (10 min Redis cache)
-    ├── Claude API         ──► AI deep analysis (BUY/HOLD/SELL)
+    ├── Reddit RSS         ──► Retail social sentiment (168h rolling)
+    ├── OpenRouter API     ──► AI deep analysis (Routes to Claude/Llama/GPT)
     │
     ├── PostgreSQL         ──► Company data + AI insights (persistent)
     └── Redis              ──► News, social, filings (ephemeral)

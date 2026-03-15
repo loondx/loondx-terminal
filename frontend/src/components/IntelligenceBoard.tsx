@@ -166,12 +166,17 @@ export const IntelligenceBoard: React.FC<Props> = ({ curStock }) => {
                 <div key={i} className="bg-brand-bgc border border-brand-bd rounded-[4px] p-[8px] flex items-center justify-between hover:border-brand-t3 transition-colors group">
                   <div>
                     <div className="font-mono text-[11px] text-brand-t1 font-semibold">{c.name}</div>
-                    <div className="text-[9px] text-brand-t3">{c.type.toUpperCase()} • {c.item}</div>
+                    <div className="text-[10px] text-brand-t3">{c.type.toUpperCase()} • {c.item}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-[8px] uppercase tracking-[.1em] text-brand-t4 mb-[2px]">Risk Exposure</div>
-                    <div className={`font-mono text-[9px] px-[4px] py-[2px] rounded-[2px] ${c.risk.includes('High') ? 'bg-brand-reg text-brand-re' : c.risk.includes('Medium') ? 'bg-brand-org text-brand-or' : 'bg-brand-grg text-brand-gr'}`}>
-                      {c.risk}
+                    <div className="text-[8px] uppercase tracking-[.1em] text-brand-t4 mb-[2px]">{c.type === 'competitor' ? 'Market Share' : 'Risk Exposure'}</div>
+                    <div className={`font-mono text-[9px] px-[4px] py-[2px] rounded-[2px] ${
+                        c.type === 'competitor' ? 'bg-brand-blg text-brand-bl' :
+                        c.risk?.includes('High') ? 'bg-brand-reg text-brand-re' : 
+                        c.risk?.includes('Medium') ? 'bg-brand-org text-brand-or' : 
+                        'bg-brand-grg text-brand-gr'
+                    }`}>
+                      {c.type === 'competitor' ? 'Direct Rival' : c.risk}
                     </div>
                   </div>
                 </div>

@@ -47,9 +47,16 @@ export class ScraperService {
   }
 
   /**
-   * Fetches the REAL-TIME price from Yahoo Finance API.
+   * Fetches the REAL-TIME price.
+   * Prioritizes Google Search scraping to match user's expectation of "exact price".
+   * Falls back to Yahoo Finance for detailed metadata.
    */
   async fetchLivePrice(ticker: string): Promise<{ symbol: string; price: number; change: number; changePercent: number; name: string; exchange: string; dayLow?: number; dayHigh?: number } | null> {
+    const cleanTicker = ticker.split('.')[0].toUpperCase();
+    
+    // 1. Try Google Search first for "Real-time" effect
+    const googleData = await this.fetchGooglePrice(cleanTicker);
+    
     try {
       const yfTicker = ticker.includes('.') ? ticker : `${ticker}.NS`;
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfTicker)}?interval=1d&range=1d`;
@@ -57,52 +64,87 @@ export class ScraperService {
       const response = await firstValueFrom(
         this.httpService.get(url, {
           headers: { 'User-Agent': 'Mozilla/5.0' },
-          timeout: 8000,
+          timeout: 5000,
         }),
       );
 
       const meta = response.data?.chart?.result?.[0]?.meta;
-      if (!meta) return null;
+      
+      // If we got Google price, use it but merge with Yahoo's metadata
+      if (googleData && meta) {
+        const price = googleData.price;
+        const prev = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        const change = parseFloat((price - prev).toFixed(2));
+        const changePct = prev > 0 ? parseFloat(((change / prev) * 100).toFixed(2)) : 0;
 
-      const price  = meta.regularMarketPrice ?? meta.previousClose ?? 0;
-      const prev   = meta.chartPreviousClose ?? meta.previousClose ?? price;
-      const change = parseFloat((price - prev).toFixed(2));
-      const changePct = prev > 0 ? parseFloat(((change / prev) * 100).toFixed(2)) : 0;
+        return {
+          symbol: yfTicker,
+          price: price,
+          change: change,
+          changePercent: changePct,
+          name: meta.longName || meta.shortName || cleanTicker,
+          exchange: meta.exchangeName || 'NSE',
+          dayLow: meta.regularMarketDayLow,
+          dayHigh: meta.regularMarketDayHigh,
+        };
+      }
+
+      // If Google failed but Yahoo worked
+      if (meta) {
+        const price  = meta.regularMarketPrice ?? meta.previousClose ?? 0;
+        const prev   = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        const change = parseFloat((price - prev).toFixed(2));
+        const changePct = prev > 0 ? parseFloat(((change / prev) * 100).toFixed(2)) : 0;
+
+        return {
+          symbol: yfTicker,
+          price,
+          change,
+          changePercent: changePct,
+          name: meta.longName || meta.shortName || ticker,
+          exchange: meta.exchangeName || 'NSE',
+          dayLow: meta.regularMarketDayLow,
+          dayHigh: meta.regularMarketDayHigh,
+        };
+      }
+    } catch (e) {
+      this.logger.warn(`Yahoo metadata fetch failed for ${ticker}. Returning Google data if available.`);
+    }
+
+    return googleData;
+  }
+
+  /**
+   * Extra precision fallback: Scraping Google Finance / Search for exact price.
+   */
+  async fetchGooglePrice(ticker: string): Promise<any> {
+    try {
+      const cleanTicker = ticker.split('.')[0].toUpperCase();
+      const url = `https://www.google.com/search?q=${encodeURIComponent(cleanTicker + ' share price nse')}`;
+      
+      const response = await firstValueFrom(this.httpService.get(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36' },
+        timeout: 5000,
+      }));
+
+      const $ = cheerio.load(response.data);
+      
+      // Google search price box selectors (subject to change but robust for now)
+      const priceText = $('.pclqee').first().text() || $('span[jsname="vW79of"]').first().text();
+      const price = parseFloat(priceText.replace(/,/g, ''));
+      
+      if (isNaN(price) || price === 0) return null;
 
       return {
-        symbol: yfTicker,
-        price,
-        change,
-        changePercent: changePct,
-        name: meta.longName || meta.shortName || ticker,
-        exchange: meta.exchangeName || 'NSE',
-        dayLow: meta.regularMarketDayLow,
-        dayHigh: meta.regularMarketDayHigh,
+        symbol: `${cleanTicker}.NS`,
+        price: price,
+        change: 0, // Harder to parse reliably from search
+        changePercent: 0,
+        name: cleanTicker,
+        exchange: 'NSE',
       };
     } catch (e) {
-      this.logger.warn(`Yahoo Finance direct fetch failed for ${ticker}. Attempting symbol lookup...`);
-      
-      // Fallback: Try searching for the symbol
-      try {
-        const searchUrl = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}`;
-        const searchResp = await firstValueFrom(
-          this.httpService.get(searchUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            timeout: 5000,
-          }),
-        );
-        const quotes = searchResp.data?.quotes || [];
-        // Filters for Indian exchanges or high relevance
-        const match = quotes.find((q: any) => q.exchange === 'NSI' || q.exchange === 'BSE') || quotes[0];
-        
-        if (match && match.symbol) {
-          this.logger.log(`Found matching symbol for "${ticker}": ${match.symbol}`);
-          return this.fetchLivePrice(match.symbol); // Re-fetch with correct symbol
-        }
-      } catch (searchError) {
-        this.logger.error(`Symbol lookup failed for ${ticker}: ${searchError.message}`);
-      }
-      
+      this.logger.error(`Google Price Fallback failed for ${ticker}: ${e.message}`);
       return null;
     }
   }
@@ -283,9 +325,12 @@ export class ScraperService {
    */
   async scrapeNews(ticker: string, companyName?: string, sector?: string, withinHours: number = 48) {
     const cleanTicker = ticker.split('.')[0];
-    const searchTerm = companyName ? `"${companyName}" OR "${cleanTicker}"` : `"${cleanTicker}" stock`;
-    const sectorQuery = sector ? ` OR "${sector} segment"` : '';
-    const query = encodeURIComponent(`${searchTerm}${sectorQuery}`);
+    const nameKeywords = companyName ? companyName.split(' ')[0] : '';
+    // Broadened search to capture more signal: Ticker, Name, and general market context
+    const searchTerm = nameKeywords 
+        ? `("${nameKeywords}" OR "${cleanTicker}" OR "${cleanTicker}.NS")` 
+        : `("${cleanTicker}" OR "${cleanTicker}.NS")`;
+    const query = encodeURIComponent(`${searchTerm} share price news`);
 
     const sources = [
       {
@@ -333,6 +378,15 @@ export class ScraperService {
         dateSel: 'pubDate',
         sourceSel: null,
       },
+      {
+        label: 'Fin-Blogs & Analysis',
+        url: `https://news.google.com/rss/search?q=${encodeURIComponent(`${searchTerm} (analysis OR blog OR forecast OR deep dive OR target)`)}+NSE+BSE&hl=en-IN&gl=IN&ceid=IN:en`,
+        itemSel: 'item',
+        titleSel: 'title',
+        linkSel: 'link',
+        dateSel: 'pubDate',
+        sourceSel: 'source',
+      },
     ];
 
     const seen = new Set<string>();
@@ -354,12 +408,18 @@ export class ScraperService {
             const rawTitle = $(el).find(src.titleSel).text().trim();
             const title = rawTitle.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
             
-            // Relevancy check: Match Ticker OR Company Name OR Sector (if query was sector-incl)
+            // Relevancy check: Include ticker, full name, or the first major keyword of the name
             const matchesTicker = title.toUpperCase().includes(cleanTicker.toUpperCase());
             const matchesCompany = companyName && title.toLowerCase().includes(companyName.toLowerCase());
-            const matchesSector = sector && title.toLowerCase().includes(sector.toLowerCase());
+            const matchesFirstWord = nameKeywords && nameKeywords.length > 2 && title.toLowerCase().includes(nameKeywords.toLowerCase());
 
-            if (!matchesTicker && !matchesCompany && !matchesSector && src.label === 'Google News') return;
+            // If it's a general feed (ET / Moneycontrol), we MUST strictly filter. 
+            // If it's a specific search (Google / Yahoo), trust their algorithm a bit more.
+            const isSpecificSearch = src.label === 'Google News' || src.label === 'Yahoo Finance';
+            
+            if (!isSpecificSearch && !matchesTicker && !matchesCompany && !matchesFirstWord) {
+              return;
+            }
 
             const url = $(el).find(src.linkSel).text().trim() ||
                         $(el).find(src.linkSel).attr('href') || '#';
@@ -378,7 +438,7 @@ export class ScraperService {
                 url,
                 publishedAt: pubDate,
                 source,
-                isSectorNews: !matchesTicker && !matchesCompany && matchesSector
+                isSectorNews: false
               });
             }
           });
@@ -443,9 +503,9 @@ export class ScraperService {
    async scrapeReddit(ticker: string, companyName?: string, sector?: string, withinHours: number = 48) {
     try {
       const cleanTicker = ticker.split('.')[0];
-      const nameTerm = companyName ? ` OR "${companyName}"` : '';
-      const sectorQuery = sector ? ` OR "${sector}"` : '';
-      const query = encodeURIComponent(`("${cleanTicker}"${nameTerm}${sectorQuery})`);
+      const nameKeywords = companyName ? companyName.split(' ')[0] : '';
+      const queryText = nameKeywords ? `("${nameKeywords}" OR "${cleanTicker}")` : `"${cleanTicker}"`;
+      const query = encodeURIComponent(queryText);
       
       // Target high-signal retail investor hubs
       const subreddits = 'IndianStockMarket+IndiaInvestments+pennystocks+stocks+wallstreetbets';

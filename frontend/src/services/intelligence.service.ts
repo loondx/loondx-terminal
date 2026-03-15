@@ -38,22 +38,29 @@ class IntelligenceService {
 
   async getSupplyChainGraph(ticker: string) {
     try {
-      const data = await fetchClient<any>(`/terminal/intelligence/${ticker}`);
-      const upstream = (data.upstream || []).map((u: any) => ({
-        type: 'supplier',
-        name: u.dependsOn?.name || u.dependsOnTicker,
-        item: u.item || 'Core Input',
-        risk: u.riskLevel || 'Low'
-      }));
-      
-      const downstream = (data.downstream || []).map((d: any) => ({
-        type: 'consumer',
-        name: d.stock?.name || d.stockTicker,
-        item: d.item || 'Final Product',
-        risk: 'Medium'
-      }));
+      // First, get the main dashboard data to see if we already have it
+      const dashboard = await fetchClient<any>(`/terminal/dashboard/${ticker}`);
+      if (dashboard.supplyChain) {
+        const sc = dashboard.supplyChain;
+        const results: any[] = [];
+        
+        if (sc.suppliers) sc.suppliers.forEach((s: any) => results.push({ ...s, type: 'supplier' }));
+        if (sc.customers) sc.customers.forEach((c: any) => results.push({ ...c, type: 'customer' }));
+        if (sc.competitors) sc.competitors.forEach((c: any) => results.push({ ...c, type: 'competitor', item: 'Market Rival' }));
+        
+        if (results.length > 0) return results;
+      }
 
-      return [...upstream, ...downstream];
+      // Fallback: Fetch directly from supply-chain endpoint
+      const data = await fetchClient<any>(`/terminal/supply-chain/${ticker}`);
+      if (!data) return [];
+      
+      const results: any[] = [];
+      if (data.suppliers) data.suppliers.forEach((s: any) => results.push({ ...s, type: 'supplier' }));
+      if (data.customers) data.customers.forEach((c: any) => results.push({ ...c, type: 'customer' }));
+      if (data.competitors) data.competitors.forEach((c: any) => results.push({ ...c, type: 'competitor', item: 'Market Rival' }));
+      
+      return results;
     } catch (error) {
       console.error('Failed to fetch supply chain:', error);
       return [];

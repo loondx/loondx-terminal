@@ -1,15 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { APP_CONFIG } from '../config';
 import { AppLogo } from './AppLogo';
 
 interface LoadingScreenProps {
   curStock: string;
   onComplete: () => void;
+  hasLoaded?: boolean;
 }
 
-export const LoadingScreen: React.FC<LoadingScreenProps> = ({ curStock, onComplete }) => {
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({ curStock, onComplete, hasLoaded = false }) => {
   const [loadPct, setLoadPct] = useState(0);
   const [loadStep, setLoadStep] = useState(0);
+
+  const hasLoadedRef = useRef(hasLoaded);
+  useEffect(() => { hasLoadedRef.current = hasLoaded; }, [hasLoaded]);
 
   // Loading Sequence
   useEffect(() => {
@@ -36,6 +40,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ curStock, onComple
 
     const nx = () => {
       if (i >= steps.length) {
+        if (!hasLoadedRef.current) {
+          // If animation finished but API didn't, hold at 99%
+          if (lp !== 99) setLoadPct(99); 
+          setTimeout(nx, 150);
+          return;
+        }
         animBar(100, 200, () => {
           setTimeout(() => {
             onComplete();

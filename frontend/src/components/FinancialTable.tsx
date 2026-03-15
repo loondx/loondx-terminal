@@ -24,11 +24,11 @@ export const FinancialTable: React.FC<FinancialTableProps> = ({ title, data }) =
         </div>
         <span className="text-[10px] text-brand-t4 uppercase font-black tracking-widest bg-brand-bgc px-2 py-1 rounded border border-brand-bd shadow-inner">Values in Cr (INR)</span>
       </div>
-      <div className="w-full">
-        <table className="w-full text-left border-separate border-spacing-0 relative pb-10">
+      <div className="w-full overflow-x-auto scrollbar-custom">
+        <table className="w-full text-left border-separate border-spacing-0 relative pb-10 min-w-[1000px]">
           <thead>
             <tr className="bg-brand-bgc sticky top-0 z-50">
-              <th className="p-[14px_24px] text-[10px] text-brand-t4 uppercase font-black tracking-widest sticky left-0 top-0 bg-brand-bgc z-50 border-r border-brand-bd border-b border-brand-bd min-w-[220px]">
+              <th className="p-[14px_24px] text-[10px] text-brand-t4 uppercase font-black tracking-widest sticky left-0 top-0 bg-brand-bgc z-50 border-r border-brand-bd border-b border-brand-bd min-w-[220px] shadow-[4px_0_10px_rgba(0,0,0,0.5)]">
                 PARTICULARS
               </th>
               {data.headers.map((h, i) => (
@@ -47,7 +47,7 @@ export const FinancialTable: React.FC<FinancialTableProps> = ({ title, data }) =
               
               return (
                 <tr key={idx} className={`hover:bg-[rgba(14,165,233,0.06)] transition-all group ${isProfitLine ? 'bg-[rgba(34,197,94,0.05)] border-t border-brand-gr/20' : ''} ${isHeaderLine ? 'bg-[rgba(14,165,233,0.03)]' : ''}`}>
-                  <td className={`p-[16px_24px] text-[11px] font-bold sticky left-0 z-20 border-r border-brand-bd whitespace-nowrap transition-colors backdrop-blur-md
+                  <td className={`p-[16px_24px] text-[11px] font-bold sticky left-0 z-20 border-r border-brand-bd whitespace-nowrap transition-colors backdrop-blur-md shadow-[4px_0_8px_rgba(0,0,0,0.3)]
                     ${isProfitLine ? 'text-brand-gr text-[12px]' : isHeaderLine ? 'text-brand-bl' : 'text-brand-t2'}`} 
                     style={{ backgroundColor: '#0b1122' }}>
                     {rowName}

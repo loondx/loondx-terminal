@@ -41,9 +41,10 @@ export class MarketService {
     // 2. Try official API if key is present
     if (this.apiKey) {
       try {
+        const cleanName = stock_name.replace(/\.(NS|BO)$/i, '');
         const response = await firstValueFrom(
           this.httpService.get(`${this.baseUrl}/stock`, {
-            params: { stock_name },
+            params: { stock_name: cleanName },
             headers: { 'X-Api-Key': this.apiKey },
           }),
         );

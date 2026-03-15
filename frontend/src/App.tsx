@@ -18,7 +18,8 @@ import './index.css';
 type ViewMode = 'TERMINAL' | 'INTELLIGENCE';
 
 const App: React.FC = () => {
-  const [loading, setLoading] = useState(false);
+  const [showLoadingScreen, setShowLoadingScreen] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
   // null = no stock selected → show WelcomeScreen
   const [curStock, setCurStock] = useState<string | null>(
     localStorage.getItem('loondx_last_stock') || null
@@ -38,12 +39,13 @@ const App: React.FC = () => {
   }, []);
 
   const handleLoadComplete = useCallback(() => {
-    setLoading(false);
+    setShowLoadingScreen(false);
   }, []);
 
   const handleStockChange = useCallback((ticker: string) => {
     if (!ticker) return;
-    setLoading(true);
+    setShowLoadingScreen(true);
+    setIsFetching(true);
     setCurStock(ticker);
     localStorage.setItem('loondx_last_stock', ticker); // persist for refresh
     
@@ -55,19 +57,21 @@ const App: React.FC = () => {
           localStorage.setItem('loondx_last_stock', data.stock.ticker);
         }
         setStockData(data);
-        setLoading(false);
+        setIsFetching(false);
       })
       .catch((err) => {
         console.error('Stock change error:', err);
         showToast(`✘ Engine Error: ${err.message || 'Failed to reach LOONDX Intelligence'}`);
-        setLoading(false);
+        setIsFetching(false);
       });
   }, [showToast]);
 
   const handleViewChange = useCallback((mode: ViewMode) => {
     if (mode === viewMode) return;
-    setLoading(true);
+    setShowLoadingScreen(true);
     setViewMode(mode);
+    // Let view change loader be fast since it doesn't fetch
+    setIsFetching(false); 
   }, [viewMode]);
 
   return (
@@ -76,8 +80,8 @@ const App: React.FC = () => {
         id="app"
         className="h-screen flex flex-col overflow-hidden bg-brand-bg relative"
       >
-        {loading && curStock && (
-          <LoadingScreen key={`${curStock}-${viewMode}`} curStock={curStock} onComplete={handleLoadComplete} />
+        {showLoadingScreen && curStock && (
+          <LoadingScreen key={`${curStock}-${viewMode}`} curStock={curStock} hasLoaded={!isFetching} onComplete={handleLoadComplete} />
         )}
 
         <Topbar
@@ -92,7 +96,7 @@ const App: React.FC = () => {
           {!curStock ? (
             <WelcomeScreen onSelect={handleStockChange} />
           ) : viewMode === 'TERMINAL' ? (
-            <TerminalBoard key={curStock} curStock={curStock} stockData={stockData} loading={loading} />
+            <TerminalBoard key={curStock} curStock={curStock} stockData={stockData} loading={isFetching} />
           ) : (
             <IntelligenceBoard curStock={curStock} />
           )}
