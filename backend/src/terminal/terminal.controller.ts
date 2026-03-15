@@ -232,7 +232,8 @@ export class TerminalController {
           lastUpdated: new Date(),
           stockPE: sc?.stockPE ?? 0, bookValue: sc?.bookValue ?? 0,
           financials: (sc?.financials as any) ?? {},
-        }
+        },
+        include: { sector: true }
       });
 
       // Save History (Bulk insertion for better production performance)

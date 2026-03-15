@@ -119,8 +119,21 @@ export class ScraperService {
    */
   async fetchGooglePrice(ticker: string): Promise<any> {
     try {
-      const cleanTicker = ticker.split('.')[0].toUpperCase();
-      const url = `https://www.google.com/search?q=${encodeURIComponent(cleanTicker + ' share price nse')}`;
+      let cleanTicker = ticker.split('.')[0].toUpperCase();
+      let exchangeStr = 'NSE';
+
+      // Nifty / Indices override mapping 
+      if (cleanTicker === 'NIFTY_50' || cleanTicker === 'NIFTY') {
+        cleanTicker = 'NIFTY_50';
+        exchangeStr = 'INDEXNSE';
+      } else if (cleanTicker === 'BANKNIFTY') {
+        cleanTicker = 'NIFTY_BANK';
+        exchangeStr = 'INDEXNSE';
+      } else if (cleanTicker === 'SENSEX') {
+        exchangeStr = 'INDEXBOM';
+      }
+
+      const url = `https://www.google.com/finance/quote/${cleanTicker}:${exchangeStr}`;
       
       const response = await firstValueFrom(this.httpService.get(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36' },
@@ -129,22 +142,22 @@ export class ScraperService {
 
       const $ = cheerio.load(response.data);
       
-      // Google search price box selectors (subject to change but robust for now)
-      const priceText = $('.pclqee').first().text() || $('span[jsname="vW79of"]').first().text();
-      const price = parseFloat(priceText.replace(/,/g, ''));
+      // Class used by Google Finance for the primary huge price text
+      const priceText = $('.YMlKec.fxKbKc').first().text();
+      const price = parseFloat(priceText.replace(/[^0-9.-]+/g, ''));
       
       if (isNaN(price) || price === 0) return null;
 
       return {
-        symbol: `${cleanTicker}.NS`,
+        symbol: exchangeStr === 'INDEXNSE' ? `^NSEI` : `${cleanTicker}.NS`,
         price: price,
-        change: 0, // Harder to parse reliably from search
+        change: 0, 
         changePercent: 0,
         name: cleanTicker,
-        exchange: 'NSE',
+        exchange: exchangeStr === 'INDEXNSE' ? 'INDEXNSE' : 'NSE',
       };
     } catch (e) {
-      this.logger.error(`Google Price Fallback failed for ${ticker}: ${e.message}`);
+      this.logger.error(`Google Price Fallback failed for ${ticker} : ${e.message}`);
       return null;
     }
   }

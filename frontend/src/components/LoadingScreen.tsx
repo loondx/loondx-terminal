@@ -66,7 +66,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ curStock, onComple
 
   return (
     <div id="ldr" className="fixed inset-0 bg-brand-bg z-[9999] flex flex-col items-center justify-center gap-[28px] transition-opacity duration-700">
-      <AppLogo className="text-[26px] tracking-[.32em] text-shadow-bl-lg" />
+      <AppLogo className="text-[20px] tracking-[.28em] text-shadow-bl-lg" logoSize="h-[48px]" />
       <div className="font-mono text-[38px] font-bold text-brand-bl tracking-[-.02em] min-w-[80px] text-center">{loadPct}%</div>
       <div className="w-[300px] h-[2px] bg-brand-bd rounded-[1px] overflow-hidden">
         <div className="h-full bg-gradient-to-r from-brand-bld via-brand-bl to-brand-tl rounded-[1px] shadow-[0_0_10px_var(--bl)] transition-all duration-75" style={{ width: `${loadPct}%` }}></div>

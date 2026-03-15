@@ -46,8 +46,8 @@ export const Topbar: React.FC<TopbarProps> = ({ curStock, setCurStock, viewMode,
 
   return (
     <div className="min-h-[48px] bg-[rgba(7,12,24,.98)] border-b border-brand-bd flex flex-wrap items-center px-[14px] py-[8px] lg:py-0 gap-[11px] shrink-0 backdrop-blur-[12px] z-[10000]">
-      <div onClick={() => setCurStock('')} className="cursor-pointer hover:opacity-80 transition-opacity">
-        <AppLogo hiddenOnMobile />
+      <div onClick={() => setCurStock('')} className="cursor-pointer hover:opacity-80 transition-opacity shrink-0">
+        <AppLogo hiddenOnMobile logoSize="h-[22px]" textHidden />
       </div>
       <div className="hidden sm:block w-[1px] h-[24px] bg-brand-bd shrink-0"></div>
 
