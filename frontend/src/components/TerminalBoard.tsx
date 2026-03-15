@@ -195,7 +195,11 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
       const ctxP = pChartRef.current?.getContext('2d');
 
       const history = (sd.priceHistory || []).slice().reverse();
-      const n = tf === '1D' ? 24 : tf === '1M' ? 30 : tf === '1Y' ? 250 : history.length || 60;
+      const tfMap: Record<string, number> = {
+        '1D': 1, '1W': 5, '1M': 30, '3M': 90, '6M': 180,
+        '1Y': 252, '5Y': 1260, 'MAX': 99999
+      };
+      const n = tfMap[tf] ?? (history.length || 60);
       
       let ohlcD: any[] = [];
       let lbls: string[] = [];
@@ -212,7 +216,10 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
         }));
         lbls = slice.map((h: any) => {
           const dt = new Date(h.date);
-          return tf === '1D' ? dt.getHours() + ':00' : (dt.getMonth() + 1) + '/' + dt.getDate();
+          if (tf === '1D') return dt.getHours() + ':00';
+          if (tf === '1M' || tf === '3M') return (dt.getMonth() + 1) + '/' + dt.getDate();
+          // 6M+ show Month/Year for readability
+          return dt.toLocaleString('en-IN', { month: 'short', year: '2-digit' });
         });
       } else {
         // Fallback to gen if no history - Ensure enough points for a graph
@@ -486,9 +493,9 @@ export const TerminalBoard: React.FC<TerminalBoardProps> = ({ curStock, stockDat
                     </button>
                  </div>
                  {activeMainTab === 'CHART' && (
-                    <div className="flex items-center gap-2">
-                      {['1D','1M','1Y'].map(v => <button key={v} onClick={() => setTf(v)} className={`text-[10px] font-mono px-2 py-0.5 rounded ${tf===v?'text-brand-bl bg-brand-blg border border-brand-bl':'text-brand-t4'}`}>{v}</button>)}
-                    </div>
+                     <div className="flex items-center gap-1 flex-wrap">
+                       {['1D','1W','1M','3M','6M','1Y','5Y','MAX'].map(v => <button key={v} onClick={() => setTf(v)} className={`text-[9px] font-mono px-2 py-0.5 rounded transition-all ${tf===v?'text-brand-bl bg-brand-blg border border-brand-bl':'text-brand-t4 hover:text-brand-t2'}`}>{v}</button>)}
+                     </div>
                  )}
                  <div className="w-[1px] h-[16px] bg-brand-bd hidden xs:block"></div>
                  <div className="hidden xs:flex items-center gap-1">

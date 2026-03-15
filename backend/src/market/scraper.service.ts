@@ -15,8 +15,8 @@ export class ScraperService {
   async fetchHistoricalData(ticker: string): Promise<any[]> {
     try {
       const yfTicker = ticker.includes('.') ? ticker : `${ticker}.NS`;
-      // Fetch 1 year of daily data to support multiple timeframes
-      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfTicker)}?interval=1d&range=1y`;
+      // Fetch 5 years of daily data to support 1D/1M/3M/6M/1Y/2Y/3Y/5Y/MAX timeframes
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yfTicker)}?interval=1d&range=5y`;
 
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -48,13 +48,16 @@ export class ScraperService {
 
   /**
    * Fetches the REAL-TIME price.
-   * Prioritizes Google Search scraping to match user's expectation of "exact price".
-   * Falls back to Yahoo Finance for detailed metadata.
+   * Priority: NSE India API (official) → Google Finance → Yahoo Finance
    */
-  async fetchLivePrice(ticker: string): Promise<{ symbol: string; price: number; change: number; changePercent: number; name: string; exchange: string; dayLow?: number; dayHigh?: number } | null> {
+  async fetchLivePrice(ticker: string): Promise<{ symbol: string; price: number; change: number; changePercent: number; name: string; exchange: string; dayLow?: number; dayHigh?: number; vwap?: number; weekHigh52?: number; weekLow52?: number; deliveryPct?: number; } | null> {
     const cleanTicker = ticker.split('.')[0].toUpperCase();
     
-    // 1. Try Google Search first for "Real-time" effect
+    // 1. Try NSE India API (official exchange — most accurate)
+    const nseData = await this.fetchNSEPrice(cleanTicker);
+    if (nseData) return nseData;
+
+    // 2. Fallback: Google Finance scrape
     const googleData = await this.fetchGooglePrice(cleanTicker);
     
     try {
@@ -70,41 +73,27 @@ export class ScraperService {
 
       const meta = response.data?.chart?.result?.[0]?.meta;
       
-      // If we got Google price, use it but merge with Yahoo's metadata
       if (googleData && meta) {
         const price = googleData.price;
         const prev = meta.chartPreviousClose ?? meta.previousClose ?? price;
         const change = parseFloat((price - prev).toFixed(2));
         const changePct = prev > 0 ? parseFloat(((change / prev) * 100).toFixed(2)) : 0;
-
         return {
-          symbol: yfTicker,
-          price: price,
-          change: change,
-          changePercent: changePct,
+          symbol: yfTicker, price, change, changePercent: changePct,
           name: meta.longName || meta.shortName || cleanTicker,
-          exchange: meta.exchangeName || 'NSE',
-          dayLow: meta.regularMarketDayLow,
-          dayHigh: meta.regularMarketDayHigh,
+          exchange: 'NSE', dayLow: meta.regularMarketDayLow, dayHigh: meta.regularMarketDayHigh,
         };
       }
 
-      // If Google failed but Yahoo worked
       if (meta) {
         const price  = meta.regularMarketPrice ?? meta.previousClose ?? 0;
         const prev   = meta.chartPreviousClose ?? meta.previousClose ?? price;
         const change = parseFloat((price - prev).toFixed(2));
         const changePct = prev > 0 ? parseFloat(((change / prev) * 100).toFixed(2)) : 0;
-
         return {
-          symbol: yfTicker,
-          price,
-          change,
-          changePercent: changePct,
+          symbol: yfTicker, price, change, changePercent: changePct,
           name: meta.longName || meta.shortName || ticker,
-          exchange: meta.exchangeName || 'NSE',
-          dayLow: meta.regularMarketDayLow,
-          dayHigh: meta.regularMarketDayHigh,
+          exchange: 'NSE', dayLow: meta.regularMarketDayLow, dayHigh: meta.regularMarketDayHigh,
         };
       }
     } catch (e) {
@@ -112,6 +101,86 @@ export class ScraperService {
     }
 
     return googleData;
+  }
+
+  /**
+   * NSE India official API — the most accurate source for Indian equities.
+   * Requires a session cookie warm-up (GET homepage first, then hit the API).
+   */
+  private async fetchNSEPrice(ticker: string): Promise<any> {
+    try {
+      // Step 1: Warm up session to get cookies
+      const warmupResp = await firstValueFrom(
+        this.httpService.get('https://www.nseindia.com', {
+          headers: this.nseHeaders(),
+          timeout: 5000,
+        }),
+      );
+      const rawCookies: string[] = warmupResp.headers['set-cookie'] || [];
+      const cookieStr = rawCookies.map((c: string) => c.split(';')[0]).join('; ');
+
+      // Step 2: Hit the quote API with the session cookie
+      const apiResp = await firstValueFrom(
+        this.httpService.get(
+          `https://www.nseindia.com/api/quote-equity?symbol=${encodeURIComponent(ticker)}`,
+          {
+            headers: { ...this.nseHeaders(), Cookie: cookieStr },
+            timeout: 5000,
+          },
+        ),
+      );
+
+      const d = apiResp.data;
+      if (!d?.priceInfo) return null;
+
+      const pi = d.priceInfo;
+      const si = d.securityInfo || {};
+      const md = d.metadata || {};
+
+      const price = pi.lastPrice ?? pi.close ?? 0;
+      const prev  = pi.previousClose ?? price;
+      const change = parseFloat((price - prev).toFixed(2));
+      const changePct = prev > 0 ? parseFloat(((change / prev) * 100).toFixed(2)) : 0;
+
+      this.logger.log(`[NSE] ${ticker}: ₹${price} (${changePct > 0 ? '+' : ''}${changePct}%)`);
+
+      return {
+        symbol: `${ticker}.NS`,
+        price,
+        change,
+        changePercent: changePct,
+        name: md.companyName || ticker,
+        exchange: 'NSE',
+        dayLow:      pi.intraDayHighLow?.min,
+        dayHigh:     pi.intraDayHighLow?.max,
+        vwap:        pi.vwap,
+        weekHigh52:  pi.weekHighLow?.max,
+        weekLow52:   pi.weekHighLow?.min,
+        deliveryPct: d.deliveryTradedQuantity ? (d.deliveryTradedQuantity / (d.totalTradedVolume || 1)) * 100 : undefined,
+        prevClose:   prev,
+        open:        pi.open,
+        upperBand:   pi.uppercircuitprice,
+        lowerBand:   pi.lowercircuitprice,
+      };
+    } catch (e) {
+      this.logger.warn(`NSE price fetch failed for ${ticker}: ${e.message}`);
+      return null;
+    }
+  }
+
+  /** Standard browser-like headers required by NSE to avoid bot detection */
+  private nseHeaders() {
+    return {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept-Encoding': 'gzip, deflate, br',
+      'Connection': 'keep-alive',
+      'Referer': 'https://www.nseindia.com/',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
+    };
   }
 
   /**
@@ -345,60 +414,69 @@ export class ScraperService {
         : `("${cleanTicker}" OR "${cleanTicker}.NS")`;
     const query = encodeURIComponent(`${searchTerm} share price news`);
 
+    const sectorQuery  = sector ? encodeURIComponent(`"${sector}" NSE BSE India stock market`) : null;
+
     const sources = [
+      // ── 1. Company direct search ─────────────────────────────────────────────
       {
         label: 'Google News',
         url: `https://news.google.com/rss/search?q=${query}+NSE+BSE&hl=en-IN&gl=IN&ceid=IN:en`,
-        itemSel: 'item',
-        titleSel: 'title',
-        linkSel: 'link',
-        dateSel: 'pubDate',
-        sourceSel: 'source',
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: 'source',
+        trusted: true,
       },
+      // ── 2. Analysis, blogs, forecasts ────────────────────────────────────────
+      {
+        label: 'Fin-Blogs & Analysis',
+        url: `https://news.google.com/rss/search?q=${encodeURIComponent(`${searchTerm} (analysis OR target OR forecast OR "buy rating" OR "sell rating" OR "price target" OR blog OR "deep dive")`)}+NSE&hl=en-IN&gl=IN&ceid=IN:en`,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: 'source',
+        trusted: true,
+      },
+      // ── 3. Earnings & results query ──────────────────────────────────────────
+      {
+        label: 'Earnings & Results',
+        url: `https://news.google.com/rss/search?q=${encodeURIComponent(`${searchTerm} (quarterly results OR earnings OR Q1 OR Q2 OR Q3 OR Q4 OR profit OR revenue OR EBITDA)`)}+NSE&hl=en-IN&gl=IN&ceid=IN:en`,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: 'source',
+        trusted: true,
+      },
+      // ── 4. Sector industry context ───────────────────────────────────────────
+      ...(sectorQuery ? [{
+        label: 'Sector Context',
+        url: `https://news.google.com/rss/search?q=${sectorQuery}&hl=en-IN&gl=IN&ceid=IN:en`,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: 'source',
+        trusted: false,
+        isSector: true,
+      }] : []),
+      // ── 5. Yahoo direct ticker RSS ───────────────────────────────────────────
+      {
+        label: 'Yahoo Finance',
+        url: `https://finance.yahoo.com/rss/headline?s=${cleanTicker}.NS`,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: null,
+        trusted: true,
+      },
+      // ── 6. Indian financial wire feeds ───────────────────────────────────────
       {
         label: 'ET Markets',
         url: `https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms`,
-        itemSel: 'item',
-        titleSel: 'title',
-        linkSel: 'link',
-        dateSel: 'pubDate',
-        sourceSel: null,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: null,
+        trusted: false,
       },
       {
         label: 'Moneycontrol',
         url: `https://www.moneycontrol.com/rss/business.xml`,
-        itemSel: 'item',
-        titleSel: 'title',
-        linkSel: 'link',
-        dateSel: 'pubDate',
-        sourceSel: null,
-      },
-      {
-        label: 'Yahoo Finance',
-        url: `https://finance.yahoo.com/rss/headline?s=${cleanTicker}`,
-        itemSel: 'item',
-        titleSel: 'title',
-        linkSel: 'link',
-        dateSel: 'pubDate',
-        sourceSel: null,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: null,
+        trusted: false,
       },
       {
         label: 'Business Standard',
         url: `https://www.business-standard.com/rss/markets-106.rss`,
-        itemSel: 'item',
-        titleSel: 'title',
-        linkSel: 'link',
-        dateSel: 'pubDate',
-        sourceSel: null,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: null,
+        trusted: false,
       },
       {
-        label: 'Fin-Blogs & Analysis',
-        url: `https://news.google.com/rss/search?q=${encodeURIComponent(`${searchTerm} (analysis OR blog OR forecast OR deep dive OR target)`)}+NSE+BSE&hl=en-IN&gl=IN&ceid=IN:en`,
-        itemSel: 'item',
-        titleSel: 'title',
-        linkSel: 'link',
-        dateSel: 'pubDate',
-        sourceSel: 'source',
+        label: 'Livemint',
+        url: `https://www.livemint.com/rss/markets`,
+        itemSel: 'item', titleSel: 'title', linkSel: 'link', dateSel: 'pubDate', sourceSel: null,
+        trusted: false,
       },
     ];
 
@@ -407,8 +485,8 @@ export class ScraperService {
     const now = Date.now();
     const cutoff = withinHours > 0 ? now - (withinHours * 60 * 60 * 1000) : 0;
 
-    await Promise.allSettled(
-      sources.map(async (src) => {
+      await Promise.allSettled(
+      sources.map(async (src: any) => {
         try {
           const resp = await firstValueFrom(
             this.httpService.get(src.url, {
@@ -417,7 +495,7 @@ export class ScraperService {
             }),
           );
           const $ = cheerio.load(resp.data, { xmlMode: true });
-          $(src.itemSel).slice(0, 20).each((_, el) => {
+          $(src.itemSel).slice(0, 30).each((_, el) => {
             const rawTitle = $(el).find(src.titleSel).text().trim();
             const title = rawTitle.replace(/<!\[CDATA\[|\]\]>/g, '').trim();
             
@@ -426,11 +504,8 @@ export class ScraperService {
             const matchesCompany = companyName && title.toLowerCase().includes(companyName.toLowerCase());
             const matchesFirstWord = nameKeywords && nameKeywords.length > 2 && title.toLowerCase().includes(nameKeywords.toLowerCase());
 
-            // If it's a general feed (ET / Moneycontrol), we MUST strictly filter. 
-            // If it's a specific search (Google / Yahoo), trust their algorithm a bit more.
-            const isSpecificSearch = src.label === 'Google News' || src.label === 'Yahoo Finance';
-            
-            if (!isSpecificSearch && !matchesTicker && !matchesCompany && !matchesFirstWord) {
+            // Specific search queries (Google/Yahoo flags) bypass strict checking. General wire feeds must match keywords.
+            if (!src.trusted && !matchesTicker && !matchesCompany && !matchesFirstWord) {
               return;
             }
 
@@ -451,7 +526,7 @@ export class ScraperService {
                 url,
                 publishedAt: pubDate,
                 source,
-                isSectorNews: false
+                isSectorNews: src.isSector || false,
               });
             }
           });
@@ -462,49 +537,85 @@ export class ScraperService {
     );
 
     allItems.sort((a, b) => b.publishedAt.getTime() - a.publishedAt.getTime());
-    return allItems.slice(0, 40);
+    return allItems.slice(0, 80); // Massive context length: up to 80 articles
   }
 
   /**
-   * Fetches official exchange filings from NSE.
+   * Fetches official exchange filings + corporate actions from NSE with session cookies.
+   * Returns announcements, board meetings, and corporate actions (dividends, splits, rights).
    */
-  async scrapeExchangeFilings(ticker: string, withinHours: number = 72) { // Filings slightly longer window
+  async scrapeExchangeFilings(ticker: string, withinHours: number = 120) {
     try {
       const cleanTicker = ticker.split('.')[0].toUpperCase();
-      const url = `https://www.nseindia.com/api/corp-info?symbol=${cleanTicker}&corpType=announcements&market=equities`;
 
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json',
-            'Referer': 'https://www.nseindia.com',
-          },
-          timeout: 6000,
+      // Warm up NSE session
+      const warmupResp = await firstValueFrom(
+        this.httpService.get('https://www.nseindia.com', {
+          headers: this.nseHeaders(),
+          timeout: 5000,
         }),
       );
+      const rawCookies: string[] = warmupResp.headers['set-cookie'] || [];
+      const cookieStr = rawCookies.map((c: string) => c.split(';')[0]).join('; ');
+      const headers = { ...this.nseHeaders(), Cookie: cookieStr };
 
-      const data = response.data?.data || [];
+      // Parallel fetch: announcements + corporate actions + board meetings
+      const [annResp, corpResp] = await Promise.allSettled([
+        firstValueFrom(this.httpService.get(
+          `https://www.nseindia.com/api/corp-info?symbol=${cleanTicker}&corpType=announcements&market=equities`,
+          { headers, timeout: 5000 }
+        )),
+        firstValueFrom(this.httpService.get(
+          `https://www.nseindia.com/api/corp-info?symbol=${cleanTicker}&corpType=actions&market=equities`,
+          { headers, timeout: 5000 }
+        )),
+      ]);
+
       const cutoff = withinHours > 0 ? Date.now() - (withinHours * 60 * 60 * 1000) : 0;
+      const results: any[] = [];
+      const seen = new Set<string>();
 
-      return data
-        .filter((item: any) => {
-          if (cutoff <= 0) return true;
-          const dt = new Date(item.an_dt || item.date);
-          return dt.getTime() >= cutoff;
-        })
-        .slice(0, 15)
-        .map((item: any) => ({
-          title: item.subject || item.desc || 'Exchange Filing',
-          date: item.an_dt || item.date,
-          url: item.attchmntFile
-            ? `https://nsearchives.nseindia.com/${item.attchmntFile}`
-            : `https://www.nseindia.com/get-quotes/equity?symbol=${cleanTicker}`,
-          source: 'NSE Official',
-          category: 'EXCHANGE_FILING',
-        }));
+      // Process announcements
+      if (annResp.status === 'fulfilled') {
+        const data: any[] = annResp.value.data?.data || [];
+        for (const item of data) {
+          const dt = new Date(item.an_dt || item.date || 0);
+          if (cutoff > 0 && dt.getTime() < cutoff) continue;
+          const key = (item.subject || '').slice(0, 60).toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          results.push({
+            title: item.subject || item.desc || 'Corporate Announcement',
+            date: item.an_dt || item.date,
+            url: item.attchmntFile
+              ? `https://nsearchives.nseindia.com/${item.attchmntFile}`
+              : `https://www.nseindia.com/get-quotes/equity?symbol=${cleanTicker}`,
+            source: 'NSE Announcement',
+            category: 'ANNOUNCEMENT',
+          });
+        }
+      }
+
+      // Process corporate actions (dividends, splits, rights etc.)
+      if (corpResp.status === 'fulfilled') {
+        const data: any[] = corpResp.value.data?.data || [];
+        for (const item of data.slice(0, 5)) {
+          const key = (`${item.subject || ''}${item.exDate || ''}`).slice(0, 60).toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          results.push({
+            title: `${item.purpose || item.subject || 'Corporate Action'} | Ex-Date: ${item.exDate || '--'}`,
+            date: item.exDate || item.recordDate,
+            url: `https://www.nseindia.com/get-quotes/equity?symbol=${cleanTicker}`,
+            source: 'NSE Corp Action',
+            category: 'CORPORATE_ACTION',
+          });
+        }
+      }
+
+      return results.slice(0, 20);
     } catch (e) {
-      this.logger.warn(`NSE filings fetch failed for ${ticker}: ${e.message}`);
+      this.logger.warn(`NSE filings/actions fetch failed for ${ticker}: ${e.message}`);
       return [];
     }
   }
@@ -513,7 +624,7 @@ export class ScraperService {
    * Scrapes Reddit for recent sentiment (48h).
    * Expanded to multiple subreddits and includes sector context.
    */
-   async scrapeReddit(ticker: string, companyName?: string, sector?: string, withinHours: number = 48) {
+    async scrapeReddit(ticker: string, companyName?: string, sector?: string, withinHours: number = 48) {
     try {
       const cleanTicker = ticker.split('.')[0];
       const nameKeywords = companyName ? companyName.split(' ')[0] : '';
@@ -521,8 +632,8 @@ export class ScraperService {
       const query = encodeURIComponent(queryText);
       
       // Target high-signal retail investor hubs
-      const subreddits = 'IndianStockMarket+IndiaInvestments+pennystocks+stocks+wallstreetbets';
-      const url = `https://www.reddit.com/r/${subreddits}/search.rss?q=${query}&restrict_sr=1&sort=new&limit=25`;
+      const subreddits = 'IndianStockMarket+IndiaInvestments+pennystocks+stocks+wallstreetbets+IndianStreetBets+DalalStreetTalks+ValueInvesting+Daytrading';
+      const url = `https://www.reddit.com/r/${subreddits}/search.rss?q=${query}&restrict_sr=1&sort=new&limit=60`;
 
       const response = await firstValueFrom(
         this.httpService.get(url, {
@@ -557,7 +668,7 @@ export class ScraperService {
           });
         }
       });
-      return posts.slice(0, 20);
+      return posts.slice(0, 60);
     } catch (e) {
       this.logger.error(`Reddit fetch failed for ${ticker}: ${e.message}`);
       return [];

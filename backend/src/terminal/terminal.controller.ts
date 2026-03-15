@@ -62,7 +62,7 @@ export class TerminalController {
       include: {
         sector:     true,
         aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
-        priceHistory: { orderBy: { date: 'desc' }, take: 300 },
+        priceHistory: { orderBy: { date: 'desc' }, take: 1500 },
       },
     }) as any;
 
@@ -279,7 +279,7 @@ export class TerminalController {
         include: {
           sector:     true,
           aiInsights: { orderBy: { precomputedAt: 'desc' }, take: 1 },
-          priceHistory: { orderBy: { date: 'desc' }, take: 300 },
+          priceHistory: { orderBy: { date: 'desc' }, take: 1500 },
         },
       });
 
